@@ -1,0 +1,6 @@
+{
+  "name": "MeezanFlow — Balance your business. Flow with confidence.",
+  "description": "Modern business accounting and financial management SaaS for small businesses, shopkeepers, wholesalers, and independent business owners.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

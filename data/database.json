@@ -1,0 +1,26 @@
+{
+  "users": [
+    {
+      "id": "39HrLiFpB0VwoRrBtS7cfTX0km73",
+      "name": "Muhammad Nouman",
+      "email": "90mi1150@gmail.com",
+      "password": "",
+      "role": "Owner",
+      "businessName": "My Karyana Store"
+    },
+    {
+      "id": "byOhluSsC6gM3qp5V2FABLg5t5s1",
+      "name": "Muhammad Nouman",
+      "email": "mnomi4884@gmail.com",
+      "password": "",
+      "role": "Owner",
+      "businessName": "My Karyana Store"
+    }
+  ],
+  "customers": [],
+  "suppliers": [],
+  "transactions": [],
+  "cashbook": [],
+  "inventory": [],
+  "invoices": []
+}

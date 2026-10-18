@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DigiKhata</string>
+    <string name="title_activity_main">DigiKhata</string>
+    <string name="package_name">com.digikhata.ledger</string>
+    <string name="custom_url_scheme">com.digikhata.ledger</string>
+</resources>
