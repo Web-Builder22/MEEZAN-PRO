@@ -112,14 +112,21 @@ export function formatFirebaseAuthError(err: any): string {
   const code = err?.code || '';
   const message = err?.message || '';
 
-  if (code === 'auth/operation-not-allowed') {
-    return `Email/Password provider is not yet enabled in your Firebase Project. Please enable it in Firebase Console (Authentication > Sign-in method > Email/Password), or sign in with Google directly.`;
+  if (code === 'auth/unauthorized-domain') {
+    const domain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+    return `This domain (${domain}) is not authorized for Google Sign-In in your Firebase project. Please add "${domain}" in Firebase Console → Authentication → Settings → Authorized domains.`;
   }
-  if (code === 'auth/popup-closed-by-user') {
+  if (code === 'auth/operation-not-allowed') {
+    return `This sign-in provider is not enabled in your Firebase Project. Please enable it in Firebase Console (Authentication → Sign-in method), or sign in with Google directly.`;
+  }
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
     return 'Google Sign-In popup was closed before completing.';
   }
   if (code === 'auth/popup-blocked') {
-    return 'Google Sign-In popup was blocked by browser. Please allow popups for this site.';
+    return 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.';
+  }
+  if (code === 'auth/account-exists-with-different-credential') {
+    return 'An account already exists with the same email address using a different sign-in method.';
   }
   if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
     return 'Invalid email or password. Please verify your credentials or create a new account.';
@@ -136,6 +143,9 @@ export function formatFirebaseAuthError(err: any): string {
   if (code === 'auth/network-request-failed') {
     return 'Network connection failed. Please check your internet connection.';
   }
+  if (message.includes("Failed to execute 'json' on 'Response'") || message.includes('Unexpected end of JSON input')) {
+    return 'Server returned an empty or invalid response during sign-in sync. Please try again.';
+  }
   return message || 'Authentication failed. Please try again.';
 }
 
@@ -147,5 +157,9 @@ export {
   signOut,
   updateProfile,
   onAuthStateChanged,
+  doc,
+  getDoc,
+  setDoc,
   type FirebaseUser
 };
+

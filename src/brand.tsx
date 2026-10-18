@@ -29,7 +29,7 @@ export const BRAND = {
 } as const;
 
 interface MeezanLogoProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | number;
   className?: string;
 }
 
@@ -40,14 +40,23 @@ interface MeezanLogoProps {
  * Palette: Deep Navy (#0B192C), Crisp White (#FFFFFF), Subtle Gold (#D4AF37)
  */
 export function MeezanFlowLogo({ size = 'md', className = '' }: MeezanLogoProps) {
+  const normalizedSize: 'sm' | 'md' | 'lg' =
+    typeof size === 'number'
+      ? size <= 30
+        ? 'sm'
+        : size >= 40
+        ? 'lg'
+        : 'md'
+      : size;
+
   const dimensions =
-    size === 'sm'
+    normalizedSize === 'sm'
       ? 'h-7 w-7 rounded-lg'
-      : size === 'lg'
+      : normalizedSize === 'lg'
       ? 'h-11 w-11 rounded-xl'
       : 'h-9 w-9 rounded-xl';
 
-  const svgSize = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
+  const svgSize = normalizedSize === 'sm' ? 'h-4 w-4' : normalizedSize === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
 
   return (
     <div

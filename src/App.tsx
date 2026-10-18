@@ -350,20 +350,32 @@ export default function App() {
     }
   };
 
+  // Guard to prevent duplicate concurrent firebaseLogin calls when signInWithPopup triggers onAuthStateChanged
+  const isManualAuthInProgress = React.useRef(false);
+
   // Sync Firebase authentication state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser && fbUser.email) {
-        const savedSession = localStorage.getItem('user_session');
-        const currentSaved = savedSession ? JSON.parse(savedSession) : null;
-        if (!currentSaved || currentSaved.email.toLowerCase() !== fbUser.email.toLowerCase()) {
+      if (isManualAuthInProgress.current) {
+        return;
+      }
+      const userEmail = fbUser?.email || fbUser?.providerData?.[0]?.email;
+      if (fbUser && userEmail) {
+        let currentSaved: User | null = null;
+        try {
+          const savedSession = localStorage.getItem('user_session');
+          currentSaved = savedSession ? JSON.parse(savedSession) : null;
+        } catch {
+          currentSaved = null;
+        }
+        if (!currentSaved || currentSaved.email.toLowerCase() !== userEmail.toLowerCase()) {
           try {
             const syncedUser = await api.firebaseLogin({
-              email: fbUser.email,
-              name: fbUser.displayName || fbUser.email.split('@')[0],
+              email: userEmail,
+              name: fbUser.displayName || fbUser.providerData?.[0]?.displayName || userEmail.split('@')[0],
               uid: fbUser.uid,
-              role: 'Owner',
-              businessName: currentSaved?.businessName || 'My Business'
+              role: currentSaved?.role || 'Owner',
+              businessName: currentSaved?.businessName || 'MeezanFlow Business'
             });
             setUser(syncedUser);
             localStorage.setItem('user_session', JSON.stringify(syncedUser));
@@ -381,18 +393,20 @@ export default function App() {
     setIsAuthLoading(true);
     setAuthError('');
     setAuthMessage('');
+    isManualAuthInProgress.current = true;
     try {
       const res = await signInWithPopup(auth, googleProvider);
       const fbUser = res.user;
-      if (!fbUser.email) {
-        throw new Error('No email returned from Google authentication');
+      const userEmail = fbUser.email || fbUser.providerData?.[0]?.email;
+      if (!userEmail) {
+        throw new Error('No email address was returned from your Google account.');
       }
       const syncedUser = await api.firebaseLogin({
-        email: fbUser.email,
-        name: fbUser.displayName || fbUser.email.split('@')[0],
+        email: userEmail,
+        name: fbUser.displayName || fbUser.providerData?.[0]?.displayName || userEmail.split('@')[0],
         uid: fbUser.uid,
-        role: 'Owner',
-        businessName: authBusiness || 'My Business'
+        role: authRole || 'Owner',
+        businessName: authBusiness || 'MeezanFlow Business'
       });
       setUser(syncedUser);
       localStorage.setItem('user_session', JSON.stringify(syncedUser));
@@ -401,6 +415,7 @@ export default function App() {
       console.error('Google sign-in error:', err);
       setAuthError(formatFirebaseAuthError(err));
     } finally {
+      isManualAuthInProgress.current = false;
       setIsAuthLoading(false);
     }
   };
@@ -411,6 +426,7 @@ export default function App() {
     setIsAuthLoading(true);
     setAuthError('');
     setAuthMessage('');
+    isManualAuthInProgress.current = true;
     try {
       if (isLogin) {
         let fbUser: any = null;
@@ -434,8 +450,8 @@ export default function App() {
         }
 
         const syncedUser = await api.firebaseLogin({
-          email: fbUser.email,
-          name: fbUser.displayName || fbUser.email.split('@')[0],
+          email: fbUser.email || authEmail,
+          name: fbUser.displayName || (fbUser.email || authEmail).split('@')[0],
           uid: fbUser.uid
         });
         setUser(syncedUser);
@@ -456,7 +472,7 @@ export default function App() {
           email: authEmail,
           uid: res.user.uid,
           role: authRole,
-          businessName: authBusiness
+          businessName: authBusiness || 'MeezanFlow Business'
         });
         setUser(registered);
         localStorage.setItem('user_session', JSON.stringify(registered));
@@ -466,6 +482,7 @@ export default function App() {
       console.error('Email auth error:', err);
       setAuthError(formatFirebaseAuthError(err));
     } finally {
+      isManualAuthInProgress.current = false;
       setIsAuthLoading(false);
     }
   };
@@ -523,7 +540,7 @@ export default function App() {
       setCustBalance('');
       fetchAllData();
     } catch (err: any) {
-      alert(err.message);
+      triggerAlert(err.message);
     }
   };
 

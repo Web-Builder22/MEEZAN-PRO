@@ -152,7 +152,7 @@ async function startServer() {
           email: email.toLowerCase(),
           password: '',
           role: 'Owner' as UserRole,
-          businessName: 'DigiKhata Business'
+          businessName: 'MeezanFlow Business'
         };
         db.users.push(user);
         saveDb(db);
@@ -168,99 +168,126 @@ async function startServer() {
 
   // --- API Authentication Routes ---
   app.post('/api/auth/firebase-login', (req, res) => {
-    const { email, name, uid, role, businessName } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-    
-    let user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      user = {
-        id: uid || 'u_' + Math.random().toString(36).substring(2, 9),
-        name: name || email.split('@')[0],
-        email: email.toLowerCase(),
-        password: '',
-        role: (role as UserRole) || 'Owner',
-        businessName: businessName || 'DigiKhata Business'
-      };
-      db.users.push(user);
-      saveDb(db);
-    } else {
-      if (name && (!user.name || user.name === user.email.split('@')[0])) {
-        user.name = name;
+    try {
+      const { email, name, uid, role, businessName } = req.body || {};
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email is required' });
       }
-      if (businessName) {
-        user.businessName = businessName;
+      
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!Array.isArray(db.users)) {
+        db.users = [];
       }
-      saveDb(db);
-    }
 
-    const { password: _, ...userWithoutPassword } = user;
-    res.json({
-      ...userWithoutPassword,
-      token: user.email
-    });
+      let user = db.users.find(u => u && u.email && u.email.toLowerCase() === normalizedEmail);
+      if (!user) {
+        user = {
+          id: uid || 'u_' + Math.random().toString(36).substring(2, 9),
+          name: (name && String(name).trim()) || normalizedEmail.split('@')[0],
+          email: normalizedEmail,
+          password: '',
+          role: (role as UserRole) || 'Owner',
+          businessName: (businessName && String(businessName).trim()) || 'MeezanFlow Business'
+        };
+        db.users.push(user);
+        saveDb(db);
+      } else {
+        if (name && (!user.name || user.name === user.email.split('@')[0])) {
+          user.name = String(name).trim();
+        }
+        if (businessName) {
+          user.businessName = String(businessName).trim();
+        }
+        saveDb(db);
+      }
+
+      const { password: _, ...userWithoutPassword } = user;
+      return res.status(200).json({
+        ...userWithoutPassword,
+        token: user.email
+      });
+    } catch (err: any) {
+      console.error('Error in /api/auth/firebase-login:', err);
+      return res.status(500).json({ error: err?.message || 'Internal server error during Firebase login sync' });
+    }
   });
 
   app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+      
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const user = (db.users || []).find(
+        u => u && u.email && u.email.toLowerCase() === normalizedEmail && u.password === password
+      );
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      
+      const { password: _, ...userWithoutPassword } = user;
+      return res.status(200).json({
+        ...userWithoutPassword,
+        token: user.email // Simple token: user's email acts as session key
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Login failed' });
     }
-    
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    
-    const { password: _, ...userWithoutPassword } = user;
-    res.json({
-      ...userWithoutPassword,
-      token: user.email // Simple token: user's email acts as session key
-    });
   });
 
   app.post('/api/auth/signup', (req, res) => {
-    const { name, email, password, role, businessName } = req.body;
-    
-    if (!name || !email || !password || !businessName) {
-      return res.status(400).json({ error: 'All fields are required (name, email, password, businessName)' });
+    try {
+      const { name, email, password, role, businessName } = req.body || {};
+      
+      if (!name || !email || !password || !businessName) {
+        return res.status(400).json({ error: 'All fields are required (name, email, password, businessName)' });
+      }
+      
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const existing = (db.users || []).find(u => u && u.email && u.email.toLowerCase() === normalizedEmail);
+      if (existing) {
+        return res.status(400).json({ error: 'A user with this email already exists' });
+      }
+      
+      const newUser = {
+        id: 'u_' + Math.random().toString(36).substring(2, 9),
+        name: String(name).trim(),
+        email: normalizedEmail,
+        password,
+        role: (role as UserRole) || 'Owner',
+        businessName: String(businessName).trim()
+      };
+      
+      db.users.push(newUser);
+      saveDb(db);
+      
+      const { password: _, ...userWithoutPassword } = newUser;
+      return res.status(201).json({
+        ...userWithoutPassword,
+        token: newUser.email
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Signup failed' });
     }
-    
-    const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return res.status(400).json({ error: 'A user with this email already exists' });
-    }
-    
-    const newUser = {
-      id: 'u_' + Math.random().toString(36).substring(2, 9),
-      name,
-      email: email.toLowerCase(),
-      password,
-      role: (role as UserRole) || 'Owner',
-      businessName
-    };
-    
-    db.users.push(newUser);
-    saveDb(db);
-    
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.json({
-      ...userWithoutPassword,
-      token: newUser.email
-    });
   });
 
   app.post('/api/auth/forgot-password', (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+    try {
+      const { email } = req.body || {};
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const user = (db.users || []).find(u => u && u.email && u.email.toLowerCase() === normalizedEmail);
+      if (user) {
+        return res.status(200).json({ message: `Password reset instructions sent to ${email}.` });
+      }
+      return res.status(404).json({ error: 'No accounting profile found with this email' });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Password reset request failed' });
     }
-    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (user) {
-      return res.json({ message: `Password reset instructions sent to ${email}.` });
-    }
-    res.status(404).json({ error: 'No accounting profile found with this email' });
   });
 
   // --- API Dashboard / Analytics ---
