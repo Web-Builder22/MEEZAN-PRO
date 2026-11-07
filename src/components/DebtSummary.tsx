@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { Customer, Supplier, Transaction } from '../types';
 import { Language, translations } from '../translations';
+import { PartyAvatar } from '../brand';
+import { motion } from 'motion/react';
 
 export type RiskLevel = 'high' | 'medium' | 'low';
 
@@ -64,7 +66,6 @@ export default function DebtSummary({
   const [showAllDebtors, setShowAllDebtors] = useState(false);
   const [showAllCreditors, setShowAllCreditors] = useState(false);
 
-  // Calculate days since last payment or account update
   const getDaysSince = (dateStr?: string): number | null => {
     if (!dateStr) return null;
     const parsed = new Date(dateStr).getTime();
@@ -73,7 +74,6 @@ export default function DebtSummary({
     return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
   };
 
-  // Map last transaction date per customer
   const lastTxByCustomer = useMemo(() => {
     const map: Record<string, string> = {};
     transactions.forEach((tx) => {
@@ -85,7 +85,6 @@ export default function DebtSummary({
     return map;
   }, [transactions]);
 
-  // Evaluate Risk Level based on amount, share of total portfolio, and inactivity
   const evaluateAccountRisk = (
     amount: number,
     sharePercent: number,
@@ -128,7 +127,6 @@ export default function DebtSummary({
     };
   };
 
-  // Categorize Debtors (Receivables owed to the business)
   const categorizedDebtors = useMemo<CategorizedAccount[]>(() => {
     const rawDebtors: {
       id: string;
@@ -186,7 +184,6 @@ export default function DebtSummary({
       });
   }, [customers, suppliers, lastTxByCustomer]);
 
-  // Categorize Creditors (Payables the business owes to Suppliers or Customer advances)
   const categorizedCreditors = useMemo<CategorizedAccount[]>(() => {
     const rawCreditors: {
       id: string;
@@ -242,7 +239,6 @@ export default function DebtSummary({
       });
   }, [suppliers, customers, lastTxByCustomer]);
 
-  // Summary metrics
   const totalReceivables = useMemo(
     () => categorizedDebtors.reduce((sum, d) => sum + d.amount, 0),
     [categorizedDebtors]
@@ -290,7 +286,7 @@ export default function DebtSummary({
   const getRiskBadge = (level: RiskLevel) => {
     if (level === 'high') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200/80 dark:bg-red-950/50 dark:text-red-400 dark:border-red-900/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200/80 dark:bg-red-950/50 dark:text-red-400 dark:border-red-900/60">
           <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
           {t.highRisk}
         </span>
@@ -298,14 +294,14 @@ export default function DebtSummary({
     }
     if (level === 'medium') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 dark:bg-amber-950/50 dark:text-amber-300">
           <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
           {t.mediumRisk}
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400">
         <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
         {t.lowRisk}
       </span>
@@ -313,23 +309,26 @@ export default function DebtSummary({
   };
 
   return (
-    <section
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
       id="debt-summary-section"
       aria-label={t.debtSummaryTitle}
-      className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 shadow-xs space-y-5"
+      className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 shadow-2xs space-y-5"
     >
       {/* Section Header & Risk Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 border-b border-slate-100 dark:border-zinc-800/80 pb-4">
         <div className="min-w-0">
           <div className="flex items-start sm:items-center gap-2.5">
-            <div className="h-8 w-8 rounded-xl bg-[#0B192C] text-[#D4AF37] border border-[#D4AF37]/30 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 rounded-xl bg-meezan-header text-[#D4AF37] flex items-center justify-center shrink-0 shadow-2xs">
               <ShieldAlert className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight flex flex-wrap items-center gap-2">
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex flex-wrap items-center gap-2">
                 <span>{t.debtSummaryTitle}</span>
                 {(highRiskDebtors.length > 0 || highRiskCreditors.length > 0) && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-200 dark:border-red-900/60">
+                  <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-200">
                     {highRiskDebtors.length + highRiskCreditors.length} {t.highRisk}
                   </span>
                 )}
@@ -347,9 +346,9 @@ export default function DebtSummary({
             type="button"
             id="debt-filter-all"
             onClick={() => setRiskFilter('all')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center truncate ${
+            className={`px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer text-center truncate ${
               riskFilter === 'all'
-                ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                ? 'bg-[#064E3B] text-white shadow-2xs'
                 : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -359,9 +358,9 @@ export default function DebtSummary({
             type="button"
             id="debt-filter-high-risk"
             onClick={() => setRiskFilter('high')}
-            className={`flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer truncate ${
+            className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer truncate ${
               riskFilter === 'high'
-                ? 'bg-red-600 text-white shadow-xs'
+                ? 'bg-red-600 text-white shadow-2xs'
                 : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
             }`}
           >
@@ -375,19 +374,19 @@ export default function DebtSummary({
 
       {/* High-Level Risk & Exposure Overview Strip */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        {/* Card 1: High-Risk Debtor Exposure */}
-        <div className="p-4 rounded-xl bg-amber-50/40 dark:bg-amber-950/15 border border-amber-200/60 dark:border-amber-900/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold text-amber-900 dark:text-amber-300">
-            <span>{lang === 'en' ? 'High-Risk Receivables (Debtors)' : 'ہائی رسک وصول طلب ادھار'}</span>
-            <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
-              {highRiskDebtors.length} {lang === 'en' ? 'accts' : 'کھاتے'}
+        {/* Card 1: High-Risk Debtor Exposure (Maroon Receivable) */}
+        <div className="p-4 rounded-2xl bg-red-50/40 dark:bg-red-950/15 border border-red-200/60 dark:border-red-900/40 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-extrabold text-receivable-maroon">
+            <span>{lang === 'en' ? "You'll Get (High-Risk)" : 'ہائی رسک وصول طلب ادھار'}</span>
+            <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 text-receivable-maroon border border-red-200/60">
+              {highRiskDebtors.length} {lang === 'en' ? 'parties' : 'کھاتے'}
             </span>
           </div>
           <div className="mt-2 flex items-baseline justify-between gap-2">
-            <span className="text-xl font-black font-mono text-amber-700 dark:text-amber-400">
+            <span className="text-xl font-extrabold tabular-nums text-receivable-maroon">
               Rs {highRiskDebtorExposure.toLocaleString()}
             </span>
-            <span className="text-[11px] font-mono text-amber-700/80 dark:text-amber-400/80">
+            <span className="text-[11px] font-bold text-gray-500">
               {totalReceivables > 0
                 ? `${Math.round((highRiskDebtorExposure / totalReceivables) * 100)}% ${t.ofTotalReceivables}`
                 : '0%'}
@@ -395,19 +394,19 @@ export default function DebtSummary({
           </div>
         </div>
 
-        {/* Card 2: High-Risk Creditor Exposure */}
-        <div className="p-4 rounded-xl bg-red-50/40 dark:bg-red-950/15 border border-red-200/60 dark:border-red-900/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold text-red-900 dark:text-red-300">
-            <span>{lang === 'en' ? 'Urgent Payables (Creditors)' : 'واجب الادا ہائی رسک قرض'}</span>
-            <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300">
-              {highRiskCreditors.length} {lang === 'en' ? 'accts' : 'کھاتے'}
+        {/* Card 2: High-Risk Creditor Exposure (Green Payable) */}
+        <div className="p-4 rounded-2xl bg-emerald-50/40 dark:bg-emerald-950/15 border border-emerald-200/60 dark:border-emerald-900/40 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-extrabold text-payable-green">
+            <span>{lang === 'en' ? "You'll Give (Payables)" : 'واجب الادا قرض'}</span>
+            <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 text-payable-green border border-emerald-200/60">
+              {highRiskCreditors.length} {lang === 'en' ? 'parties' : 'کھاتے'}
             </span>
           </div>
           <div className="mt-2 flex items-baseline justify-between gap-2">
-            <span className="text-xl font-black font-mono text-red-600 dark:text-red-400">
+            <span className="text-xl font-extrabold tabular-nums text-payable-green">
               Rs {highRiskCreditorExposure.toLocaleString()}
             </span>
-            <span className="text-[11px] font-mono text-red-600/80 dark:text-red-400/80">
+            <span className="text-[11px] font-bold text-gray-500">
               {totalPayables > 0
                 ? `${Math.round((highRiskCreditorExposure / totalPayables) * 100)}% ${t.ofTotalPayables}`
                 : '0%'}
@@ -415,15 +414,13 @@ export default function DebtSummary({
           </div>
         </div>
 
-        {/* Card 3: Net Debt Balance & Ratio Bar */}
-        <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/70 dark:border-zinc-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-zinc-300">
+        {/* Card 3: Net Position */}
+        <div className="p-4 rounded-2xl bg-gray-50 dark:bg-zinc-800/40 border border-gray-200/70 dark:border-zinc-800 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-extrabold text-gray-700 dark:text-zinc-300">
             <span>{t.netPosition}</span>
             <span
-              className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-bold ${
-                netPosition >= 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-red-600 dark:text-red-400'
+              className={`inline-flex items-center gap-0.5 text-[11px] font-extrabold ${
+                netPosition >= 0 ? 'text-receivable-maroon' : 'text-payable-green'
               }`}
             >
               {netPosition >= 0 ? (
@@ -433,31 +430,28 @@ export default function DebtSummary({
               )}
               {netPosition >= 0
                 ? lang === 'en'
-                  ? 'Net Receivable'
+                  ? "Net You'll Get"
                   : 'وصولی زیادہ ہے'
                 : lang === 'en'
-                ? 'Net Payable'
+                ? "Net You'll Give"
                 : 'ادائیگی زیادہ ہے'}
             </span>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
             <span
-              className={`text-xl font-black font-mono ${
-                netPosition >= 0
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : 'text-red-600 dark:text-red-400'
+              className={`text-xl font-extrabold tabular-nums ${
+                netPosition >= 0 ? 'text-receivable-maroon' : 'text-payable-green'
               }`}
             >
-              {netPosition >= 0 ? '+' : '-'} Rs {Math.abs(netPosition).toLocaleString()}
+              Rs {Math.abs(netPosition).toLocaleString()}
             </span>
-            <span className="text-[10px] font-mono text-slate-400">
+            <span className="text-[10px] font-mono text-gray-400">
               {receivableRatio}% / {100 - receivableRatio}%
             </span>
           </div>
-          {/* Visual Ratio Bar */}
-          <div className="mt-2 h-1.5 w-full rounded-full bg-red-200 dark:bg-red-950 overflow-hidden flex">
+          <div className="mt-2 h-2 w-full rounded-full bg-emerald-200 dark:bg-emerald-950 overflow-hidden flex">
             <div
-              className="h-full bg-amber-500 transition-all duration-300"
+              className="h-full bg-[#7A1C1C] transition-all duration-300"
               style={{ width: `${receivableRatio}%` }}
               title={`${t.receivables}: Rs ${totalReceivables.toLocaleString()}`}
             />
@@ -467,24 +461,23 @@ export default function DebtSummary({
 
       {/* Categorized Columns: Top Debtors vs Top Creditors */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* LEFT COLUMN: TOP DEBTORS (CUSTOMERS WHO OWE US) */}
-        <div className="flex flex-col border border-gray-100 dark:border-zinc-800/90 rounded-xl overflow-hidden bg-gray-50/30 dark:bg-zinc-900/40">
-          {/* Column Header */}
+        {/* LEFT COLUMN: TOP DEBTORS (CUSTOMERS WHO OWE US - MAROON) */}
+        <div className="flex flex-col border border-gray-200/80 dark:border-zinc-800/90 rounded-2xl overflow-hidden bg-gray-50/30 dark:bg-zinc-900/40">
           <div className="p-4 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-amber-100/80 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-xl bg-red-50 dark:bg-red-950/60 text-receivable-maroon flex items-center justify-center">
                 <ArrowUpRight className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
                   <span>{t.topDebtors}</span>
-                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300">
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300">
                     {totalDebtorsMatchingFilter}
                   </span>
                 </h3>
-                <p className="text-[11px] text-gray-400 font-mono">
-                  {lang === 'en' ? 'Total Receivable:' : 'کل وصول طلب:'}{' '}
-                  <strong className="text-amber-600 dark:text-amber-400">
+                <p className="text-[11px] text-gray-500">
+                  {lang === 'en' ? 'You will get:' : 'کل وصول طلب:'}{' '}
+                  <strong className="text-receivable-maroon font-extrabold">
                     Rs {totalReceivables.toLocaleString()}
                   </strong>
                 </p>
@@ -494,48 +487,34 @@ export default function DebtSummary({
             <button
               type="button"
               onClick={() => onNavigateToAccount('customers', '')}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-[11px] font-semibold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-[11px] font-bold transition-all cursor-pointer"
             >
-              <Users className="h-3 w-3" />
-              <span>{lang === 'en' ? 'Manage Customers' : 'گاہک کھاتہ'}</span>
+              <Users className="h-3 w-3 text-[#059669]" />
+              <span>{lang === 'en' ? 'Customers' : 'گاہک کھاتہ'}</span>
             </button>
           </div>
 
-          {/* Debtors List */}
-          <div className="divide-y divide-gray-100 dark:divide-zinc-800/70 flex-1">
+          <div className="divide-y divide-slate-100 dark:divide-zinc-800/70 flex-1">
             {filteredDebtors.length > 0 ? (
-              filteredDebtors.map((debtor, idx) => (
+              filteredDebtors.map((debtor) => (
                 <div
                   key={`${debtor.accountType}-${debtor.id}`}
-                  className="p-3.5 sm:p-4 bg-white dark:bg-zinc-900 hover:bg-gray-50/70 dark:hover:bg-zinc-800/40 transition-colors flex flex-col gap-2.5"
+                  className="p-3.5 sm:p-4 bg-white dark:bg-zinc-900 hover:bg-emerald-50/20 dark:hover:bg-zinc-800/40 transition-colors flex flex-col gap-2.5"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <span
-                        className={`h-6 w-6 rounded-lg font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${
-                          debtor.riskLevel === 'high'
-                            ? 'bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-400'
-                            : 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400'
-                        }`}
-                      >
-                        #{idx + 1}
-                      </span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <PartyAvatar name={debtor.name} size="sm" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 truncate">
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-zinc-100 truncate">
                             {debtor.name}
                           </span>
                           {getRiskBadge(debtor.riskLevel)}
-                          {debtor.accountType === 'supplier-advance' && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
-                              {t.supplierAdvance}
-                            </span>
-                          )}
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5 flex-wrap">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5 flex-wrap">
                           {debtor.phone && <span className="font-mono">{debtor.phone}</span>}
                           <span>•</span>
-                          <span className="inline-flex items-center gap-1 text-gray-500 dark:text-zinc-400">
+                          <span className="inline-flex items-center gap-1 text-slate-500 dark:text-zinc-400">
                             <Clock className="h-3 w-3" />
                             {lang === 'en' ? debtor.riskReasonEn : debtor.riskReasonUr}
                           </span>
@@ -544,27 +523,20 @@ export default function DebtSummary({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="text-sm sm:text-base font-black font-mono text-amber-600 dark:text-amber-400">
+                      <div className="text-sm sm:text-base font-extrabold tabular-nums text-receivable-maroon">
                         Rs {debtor.amount.toLocaleString()}
                       </div>
-                      <div className="text-[10px] font-mono text-gray-400">
-                        {debtor.sharePercent.toFixed(1)}% {t.ofTotalReceivables}
+                      <div className="text-[11px] text-outline-label">
+                        {lang === 'en' ? "You'll Get" : 'وصولی'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Exposure Bar & Quick Actions Row */}
                   <div className="flex items-center justify-between gap-3 pt-1">
-                    <div className="flex-1 max-w-[180px] h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="flex-1 max-w-[160px] h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          debtor.riskLevel === 'high'
-                            ? 'bg-red-500'
-                            : debtor.riskLevel === 'medium'
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.max(6, debtor.sharePercent))}%` }}
+                        className="h-full rounded-full bg-[#991B1B]"
+                        style={{ width: `${Math.min(100, Math.max(8, debtor.sharePercent))}%` }}
                       />
                     </div>
 
@@ -574,7 +546,7 @@ export default function DebtSummary({
                           <button
                             type="button"
                             onClick={() => onQuickRecordPayment(debtor.rawCustomer!)}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 transition-colors cursor-pointer"
                             title={t.recordRecovery}
                           >
                             <PlusCircle className="h-3 w-3" />
@@ -584,7 +556,7 @@ export default function DebtSummary({
                             <>
                               <a
                                 href={getSingleSmsLink(debtor.name, debtor.phone, debtor.amount)}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 transition-colors"
+                                className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
                                 title={t.sendSMS}
                               >
                                 <Send className="h-2.5 w-2.5" />
@@ -594,7 +566,7 @@ export default function DebtSummary({
                                 href={getWhatsAppLink(debtor.name, debtor.phone, debtor.amount)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-400 transition-colors"
+                                className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-md bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
                                 title={t.whatsappReminder}
                               >
                                 <MessageSquare className="h-2.5 w-2.5" />
@@ -612,7 +584,7 @@ export default function DebtSummary({
                             debtor.name
                           )
                         }
-                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                       >
                         <span>{t.viewAccount}</span>
                         <ExternalLink className="h-2.5 w-2.5" />
@@ -629,12 +601,11 @@ export default function DebtSummary({
             )}
           </div>
 
-          {/* Expand / Collapse Footer */}
           {totalDebtorsMatchingFilter > 5 && (
             <button
               type="button"
               onClick={() => setShowAllDebtors(!showAllDebtors)}
-              className="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-xs font-semibold text-gray-600 dark:text-zinc-400 flex items-center justify-center gap-1.5 border-t border-gray-100 dark:border-zinc-800 transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-xs font-bold text-gray-600 dark:text-zinc-400 flex items-center justify-center gap-1.5 border-t border-gray-100 dark:border-zinc-800 transition-colors cursor-pointer"
             >
               <span>
                 {showAllDebtors
@@ -642,36 +613,31 @@ export default function DebtSummary({
                     ? 'Show Top 5 Only'
                     : 'صرف ٹاپ 5 دکھائیں'
                   : lang === 'en'
-                  ? `View All ${totalDebtorsMatchingFilter} Debtors`
-                  : `تمام ${totalDebtorsMatchingFilter} مقروض کھاتے دیکھیں`}
+                  ? `View All ${totalDebtorsMatchingFilter} Parties`
+                  : `تمام ${totalDebtorsMatchingFilter} کھاتے دیکھیں`}
               </span>
-              {showAllDebtors ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
+              {showAllDebtors ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
 
-        {/* RIGHT COLUMN: TOP CREDITORS (SUPPLIERS & ADVANCE CUSTOMERS WE OWE) */}
-        <div className="flex flex-col border border-gray-100 dark:border-zinc-800/90 rounded-xl overflow-hidden bg-gray-50/30 dark:bg-zinc-900/40">
-          {/* Column Header */}
+        {/* RIGHT COLUMN: TOP CREDITORS (SUPPLIERS & ADVANCE CUSTOMERS WE OWE - GREEN) */}
+        <div className="flex flex-col border border-gray-200/80 dark:border-zinc-800/90 rounded-2xl overflow-hidden bg-gray-50/30 dark:bg-zinc-900/40">
           <div className="p-4 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-red-100/80 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-payable-green flex items-center justify-center">
                 <ArrowDownLeft className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
                   <span>{t.topCreditors}</span>
-                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300">
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300">
                     {totalCreditorsMatchingFilter}
                   </span>
                 </h3>
-                <p className="text-[11px] text-gray-400 font-mono">
-                  {lang === 'en' ? 'Total Payable:' : 'کل واجب الادا:'}{' '}
-                  <strong className="text-red-600 dark:text-red-400">
+                <p className="text-[11px] text-gray-500">
+                  {lang === 'en' ? 'You will give:' : 'کل واجب الادا:'}{' '}
+                  <strong className="text-payable-green font-extrabold">
                     Rs {totalPayables.toLocaleString()}
                   </strong>
                 </p>
@@ -681,51 +647,29 @@ export default function DebtSummary({
             <button
               type="button"
               onClick={() => onNavigateToAccount('suppliers', '')}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-[11px] font-semibold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-[11px] font-bold transition-all cursor-pointer"
             >
-              <Truck className="h-3 w-3" />
-              <span>{lang === 'en' ? 'Manage Suppliers' : 'سپلائرز کھاتہ'}</span>
+              <Truck className="h-3 w-3 text-[#059669]" />
+              <span>{lang === 'en' ? 'Suppliers' : 'سپلائرز کھاتہ'}</span>
             </button>
           </div>
 
-          {/* Creditors List */}
-          <div className="divide-y divide-gray-100 dark:divide-zinc-800/70 flex-1">
+          <div className="divide-y divide-slate-100 dark:divide-zinc-800/70 flex-1">
             {filteredCreditors.length > 0 ? (
-              filteredCreditors.map((creditor, idx) => (
+              filteredCreditors.map((creditor) => (
                 <div
                   key={`${creditor.accountType}-${creditor.id}`}
-                  className="p-3.5 sm:p-4 bg-white dark:bg-zinc-900 hover:bg-gray-50/70 dark:hover:bg-zinc-800/40 transition-colors flex flex-col gap-2.5"
+                  className="p-3.5 sm:p-4 bg-white dark:bg-zinc-900 hover:bg-emerald-50/20 dark:hover:bg-zinc-800/40 transition-colors flex flex-col gap-2.5"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <span
-                        className={`h-6 w-6 rounded-lg font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${
-                          creditor.riskLevel === 'high'
-                            ? 'bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-400'
-                            : 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400'
-                        }`}
-                      >
-                        #{idx + 1}
-                      </span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <PartyAvatar name={creditor.name} size="sm" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 truncate">
+                          <span className="text-sm font-extrabold text-gray-900 dark:text-zinc-100 truncate">
                             {creditor.name}
                           </span>
                           {getRiskBadge(creditor.riskLevel)}
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {creditor.accountType === 'supplier' ? (
-                              <>
-                                <Truck className="h-2.5 w-2.5" />
-                                {t.supplierAccount}
-                              </>
-                            ) : (
-                              <>
-                                <Users className="h-2.5 w-2.5" />
-                                {t.customerAdvance}
-                              </>
-                            )}
-                          </span>
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5 flex-wrap">
                           {creditor.phone && <span className="font-mono">{creditor.phone}</span>}
@@ -739,27 +683,20 @@ export default function DebtSummary({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="text-sm sm:text-base font-black font-mono text-red-600 dark:text-red-400">
+                      <div className="text-sm sm:text-base font-extrabold tabular-nums text-payable-green">
                         Rs {creditor.amount.toLocaleString()}
                       </div>
-                      <div className="text-[10px] font-mono text-gray-400">
-                        {creditor.sharePercent.toFixed(1)}% {t.ofTotalPayables}
+                      <div className="text-[11px] text-outline-label">
+                        {lang === 'en' ? "You'll Give" : 'ادائیگی'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Exposure Bar & Action Link */}
                   <div className="flex items-center justify-between gap-3 pt-1">
-                    <div className="flex-1 max-w-[180px] h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="flex-1 max-w-[160px] h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          creditor.riskLevel === 'high'
-                            ? 'bg-red-600'
-                            : creditor.riskLevel === 'medium'
-                            ? 'bg-amber-500'
-                            : 'bg-slate-500'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.max(6, creditor.sharePercent))}%` }}
+                        className="h-full rounded-full bg-[#16A34A]"
+                        style={{ width: `${Math.min(100, Math.max(8, creditor.sharePercent))}%` }}
                       />
                     </div>
 
@@ -772,7 +709,7 @@ export default function DebtSummary({
                             creditor.name
                           )
                         }
-                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 transition-colors cursor-pointer"
                       >
                         <span>{t.viewAccount}</span>
                         <ExternalLink className="h-2.5 w-2.5" />
@@ -789,12 +726,11 @@ export default function DebtSummary({
             )}
           </div>
 
-          {/* Expand / Collapse Footer */}
           {totalCreditorsMatchingFilter > 5 && (
             <button
               type="button"
               onClick={() => setShowAllCreditors(!showAllCreditors)}
-              className="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-xs font-semibold text-gray-600 dark:text-zinc-400 flex items-center justify-center gap-1.5 border-t border-gray-100 dark:border-zinc-800 transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-xs font-bold text-slate-600 dark:text-zinc-400 flex items-center justify-center gap-1.5 border-t border-slate-100 dark:border-zinc-800 transition-colors cursor-pointer"
             >
               <span>
                 {showAllCreditors
@@ -802,18 +738,14 @@ export default function DebtSummary({
                     ? 'Show Top 5 Only'
                     : 'صرف ٹاپ 5 دکھائیں'
                   : lang === 'en'
-                  ? `View All ${totalCreditorsMatchingFilter} Creditors`
-                  : `تمام ${totalCreditorsMatchingFilter} قرض خواہ کھاتے دیکھیں`}
+                  ? `View All ${totalCreditorsMatchingFilter} Parties`
+                  : `تمام ${totalCreditorsMatchingFilter} کھاتے دیکھیں`}
               </span>
-              {showAllCreditors ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
+              {showAllCreditors ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

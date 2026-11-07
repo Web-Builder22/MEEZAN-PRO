@@ -1,12 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Noto+Sans+Urdu:wght@400;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Noto+Sans+Urdu:wght@400;700;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Noto Sans Urdu", "Albert Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Inter", "Noto Sans Urdu", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", "Noto Sans Urdu", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --animate-float: float 6s ease-in-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
   --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  --animate-shimmer: shimmer 2s infinite linear;
+  --animate-shimmer: shimmer 2.2s infinite linear;
 }
 
 @layer base {
@@ -15,6 +16,14 @@
     max-width: 100vw;
     width: 100%;
     -webkit-tap-highlight-color: transparent;
+    font-family: "Plus Jakarta Sans", "Inter", "Noto Sans Urdu", sans-serif;
+    background-color: #FAF9F6;
+    color: #0F172A;
+  }
+
+  .dark html, .dark body {
+    background-color: #090D0B;
+    color: #F8FAFC;
   }
 
   @media (max-width: 640px) {
@@ -29,9 +38,74 @@
   }
 }
 
+/* MeezanFlow Premium Fintech Palette: Deep Emerald, Dark Forest Green, Warm Off-White & Subtle Gold */
+.bg-meezan-header {
+  background: linear-gradient(135deg, #022C22 0%, #042F24 48%, #064E3B 100%);
+}
+
+.bg-meezan-btn {
+  background: linear-gradient(135deg, #064E3B 0%, #047857 50%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.25);
+}
+
+.bg-meezan-btn:hover {
+  background: linear-gradient(135deg, #042F24 0%, #065F46 50%, #047857 100%);
+  box-shadow: 0 6px 20px rgba(4, 120, 87, 0.35);
+}
+
+.bg-meezan-collection {
+  background: linear-gradient(135deg, #D4AF37 0%, #B89122 100%);
+  color: #022C22;
+}
+
+/* Refined Fintech Typography (replaces heavy cartoon outlines with crisp, high-end fintech legibility) */
+.text-outline {
+  font-family: "Plus Jakarta Sans", "Inter", "Noto Sans Urdu", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.text-outline-label {
+  font-family: "Plus Jakarta Sans", "Inter", "Noto Sans Urdu", sans-serif;
+  font-weight: 600;
+  color: #64748B;
+  letter-spacing: 0.005em;
+}
+
+.dark .text-outline-label {
+  color: #94A3B8;
+}
+
+/* Avatar initial style: Deep Emerald & Gold Fintech Monogram */
+.avatar-initial-peach {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-weight: 800;
+  color: #064E3B;
+  letter-spacing: -0.02em;
+}
+
+.dark .avatar-initial-peach {
+  color: #34D399;
+}
+
+/* Receivable & Payable Financial Figure Classes */
+.text-receivable-maroon {
+  color: #B45309;
+}
+.dark .text-receivable-maroon {
+  color: #FBBF24;
+}
+
+.text-payable-green {
+  color: #059669;
+}
+.dark .text-payable-green {
+  color: #34D399;
+}
+
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
 }
 
 @keyframes shimmer {
@@ -39,27 +113,40 @@
   100% { background-position: 200% 0; }
 }
 
+/* Skeleton Shimmer Loader */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.5) 25%, rgba(241, 245, 249, 0.9) 50%, rgba(226, 232, 240, 0.5) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite linear;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(24, 24, 27, 0.6) 25%, rgba(39, 39, 42, 0.9) 50%, rgba(24, 24, 27, 0.6) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite linear;
+}
+
 /* Glassmorphism utility classes */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(250, 249, 246, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .dark .glass-panel {
-  background: rgba(20, 20, 22, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 23, 19, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
 .dark .glass-card {
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(6, 78, 59, 0.2);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -75,23 +162,32 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.22);
+  background: rgba(6, 78, 59, 0.25);
   border-radius: 9999px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(212, 175, 55, 0.25);
+  background: rgba(212, 175, 55, 0.35);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(212, 175, 55, 0.55);
+  background: rgba(6, 78, 59, 0.5);
 }
 
-/* Custom transitions and subtle details */
 input, select, textarea, button {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .text-urdu-rtl {
   font-family: "Noto Sans Urdu", "Plus Jakarta Sans", sans-serif;
+}
+
+/* Respect Reduced Motion Accessibility Preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

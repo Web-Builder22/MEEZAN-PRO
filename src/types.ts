@@ -21,6 +21,9 @@ export interface Customer {
   balance: number; // Positive means customer owes us (Receivable), negative means we owe customer (Payable)
   updatedAt: string;
   businessId: string;
+  promisedPaymentDate?: string; // YYYY-MM-DD promised payment due date
+  promisedPaymentNote?: string;
+  lastReminderOpenedAt?: string; // ISO timestamp when reminder dispatch was last initiated
 }
 
 export interface Supplier {

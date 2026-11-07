@@ -702,7 +702,7 @@ export const api = {
       },
       'Failed to add customer',
       () => {
-        const { name, phone, email, initialBalance } = payload || {};
+        const { name, phone, email, initialBalance, promisedPaymentDate, promisedPaymentNote } = payload || {};
         if (!name || !phone) {
           throw new Error('Customer Name and Phone number are required');
         }
@@ -715,7 +715,9 @@ export const api = {
           email: email ? String(email).trim() : '',
           balance: Number(initialBalance) || 0,
           updatedAt: nowIso,
-          businessId: 'b1'
+          businessId: 'b1',
+          ...(promisedPaymentDate ? { promisedPaymentDate: String(promisedPaymentDate).trim() } : {}),
+          ...(promisedPaymentNote ? { promisedPaymentNote: String(promisedPaymentNote).trim() } : {})
         };
         db.customers.push(newCustomer);
 
@@ -756,7 +758,7 @@ export const api = {
         if (index === -1) {
           throw new Error('Customer not found');
         }
-        const { name, phone, email, balance } = payload || {};
+        const { name, phone, email, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = payload || {};
         const updatedName = name ? String(name).trim() : db.customers[index].name;
         db.customers[index] = {
           ...db.customers[index],
@@ -764,6 +766,18 @@ export const api = {
           phone: phone ? String(phone).trim() : db.customers[index].phone,
           email: email !== undefined ? String(email).trim() : db.customers[index].email,
           balance: balance !== undefined ? Number(balance) : db.customers[index].balance,
+          promisedPaymentDate:
+            promisedPaymentDate !== undefined
+              ? String(promisedPaymentDate).trim()
+              : db.customers[index].promisedPaymentDate,
+          promisedPaymentNote:
+            promisedPaymentNote !== undefined
+              ? String(promisedPaymentNote).trim()
+              : db.customers[index].promisedPaymentNote,
+          lastReminderOpenedAt:
+            lastReminderOpenedAt !== undefined
+              ? String(lastReminderOpenedAt).trim()
+              : db.customers[index].lastReminderOpenedAt,
           updatedAt: new Date().toISOString()
         };
         if (name) {

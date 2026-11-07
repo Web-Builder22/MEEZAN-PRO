@@ -131,7 +131,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '15mb' }));
 
   // Helper middleware for authorization/context
   const authenticateUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -419,7 +419,7 @@ async function startServer() {
   });
 
   app.post('/api/customers', authenticateUser, (req, res) => {
-    const { name, phone, email, initialBalance } = req.body;
+    const { name, phone, email, initialBalance, promisedPaymentDate, promisedPaymentNote } = req.body;
     if (!name || !phone) {
       return res.status(400).json({ error: 'Customer Name and Phone number are required' });
     }
@@ -433,7 +433,9 @@ async function startServer() {
       email: email ? String(email).trim() : '',
       balance: Number(initialBalance) || 0,
       updatedAt: nowIso,
-      businessId: bizId
+      businessId: bizId,
+      ...(promisedPaymentDate ? { promisedPaymentDate: String(promisedPaymentDate).trim() } : {}),
+      ...(promisedPaymentNote ? { promisedPaymentNote: String(promisedPaymentNote).trim() } : {})
     };
     
     db.customers.push(newCustomer);
@@ -460,7 +462,7 @@ async function startServer() {
   });
 
   app.put('/api/customers/:id', authenticateUser, (req, res) => {
-    const { name, phone, email, balance } = req.body;
+    const { name, phone, email, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = req.body;
     const bizId = (req as any).user?.businessId || 'b1';
     const index = db.customers.findIndex((c: Customer) => c.id === req.params.id && (c.businessId || 'b1') === bizId);
     if (index === -1) {
@@ -474,6 +476,18 @@ async function startServer() {
       phone: phone ? String(phone).trim() : db.customers[index].phone,
       email: email !== undefined ? String(email).trim() : db.customers[index].email,
       balance: balance !== undefined ? Number(balance) : db.customers[index].balance,
+      promisedPaymentDate:
+        promisedPaymentDate !== undefined
+          ? String(promisedPaymentDate).trim()
+          : db.customers[index].promisedPaymentDate,
+      promisedPaymentNote:
+        promisedPaymentNote !== undefined
+          ? String(promisedPaymentNote).trim()
+          : db.customers[index].promisedPaymentNote,
+      lastReminderOpenedAt:
+        lastReminderOpenedAt !== undefined
+          ? String(lastReminderOpenedAt).trim()
+          : db.customers[index].lastReminderOpenedAt,
       updatedAt: new Date().toISOString()
     };
 

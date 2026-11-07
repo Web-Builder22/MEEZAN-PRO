@@ -32,6 +32,7 @@ import LanguageToggle from './LanguageToggle';
 import ThemeToggle from './ThemeToggle';
 import { AuthScreenMode } from './AuthPages';
 import { BRAND, MeezanFlowLogo } from '../brand';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface InteractiveLandingProps {
   language: 'en' | 'ur';
@@ -323,13 +324,13 @@ export default function InteractiveLanding({
   const AudienceIcon = currentAudience.icon;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F8FAFC] dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 font-sans selection:bg-[#0B192C] selection:text-[#D4AF37]">
+    <div className="flex-1 flex flex-col bg-[#FAF9F6] dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 font-sans selection:bg-[#064E3B] selection:text-[#D4AF37]">
       {/* 1. STICKY NAVBAR */}
       <header
         className={`sticky top-0 z-50 transition-all duration-200 px-4 sm:px-8 ${
           isScrolled
             ? 'bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800 shadow-2xs'
-            : 'bg-[#F8FAFC]/80 dark:bg-zinc-950/80 backdrop-blur-xs border-b border-slate-200/50 dark:border-zinc-800/60'
+            : 'bg-[#FAF9F6]/85 dark:bg-zinc-950/85 backdrop-blur-xs border-b border-slate-200/50 dark:border-zinc-800/60'
         }`}
       >
         <div className="max-w-7xl mx-auto h-16 flex items-center justify-between gap-8">
@@ -344,8 +345,8 @@ export default function InteractiveLanding({
           >
             <MeezanFlowLogo size="md" />
             <div className="flex flex-col">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap leading-none">
-                {BRAND.name}
+              <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap leading-none">
+                Meezan<span className="text-[#059669] dark:text-[#D4AF37]">Flow</span>
               </span>
               <span className="text-[10px] font-medium text-slate-500 dark:text-zinc-400 hidden lg:inline mt-0.5">
                 {BRAND.tagline}
@@ -354,32 +355,32 @@ export default function InteractiveLanding({
           </a>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-7 text-xs sm:text-sm font-medium text-slate-600 dark:text-zinc-300">
+          <nav className="hidden md:flex items-center gap-7 text-xs sm:text-sm font-semibold text-slate-600 dark:text-zinc-300">
             <button
               type="button"
               onClick={() => scrollToSection('features')}
-              className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
+              className="hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
             >
               {language === 'en' ? 'Features' : 'خصوصیات'}
             </button>
             <button
               type="button"
               onClick={() => scrollToSection('how-it-works')}
-              className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
+              className="hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
             >
               {language === 'en' ? 'How It Works' : 'طریقہ کار'}
             </button>
             <button
               type="button"
               onClick={() => scrollToSection('benefits')}
-              className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
+              className="hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
             >
               {language === 'en' ? 'Benefits' : 'فوائد'}
             </button>
             <button
               type="button"
               onClick={() => scrollToSection('faq')}
-              className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
+              className="hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
             >
               {language === 'en' ? 'FAQ' : 'سوالات'}
             </button>
@@ -393,7 +394,7 @@ export default function InteractiveLanding({
                 onClick={handleInstallClick}
                 className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap"
               >
-                <Download className="h-3.5 w-3.5 text-[#0B192C] dark:text-[#D4AF37]" />
+                <Download className="h-3.5 w-3.5 text-[#059669] dark:text-[#D4AF37]" />
                 <span>{t.installApp}</span>
               </button>
             )}
@@ -409,15 +410,15 @@ export default function InteractiveLanding({
             <button
               type="button"
               onClick={() => onOpenAuth('signup')}
-              className="px-4 py-2 rounded-lg bg-[#0B192C] hover:bg-[#132847] dark:bg-[#D4AF37] dark:hover:bg-[#C5A028] text-white dark:text-[#0B192C] text-xs sm:text-sm font-semibold shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              className="px-4 py-2 rounded-xl bg-meezan-btn text-white text-xs sm:text-sm font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap"
             >
-              {language === 'en' ? 'Get Started Free' : 'مفت شروع کریں'}
+              {language === 'en' ? 'Get Started' : 'مفت شروع کریں'}
             </button>
           </div>
         </div>
       </header>
 
-      {/* 2. HERO SECTION */}
+      {/* 2. HERO SECTION WITH AMBIENT FLOATING SHAPES & FRAMER MOTION */}
       <section id="top" className="relative pt-12 pb-20 lg:pt-16 lg:pb-24 px-4 sm:px-8 overflow-hidden">
         {/* Subtle architectural grid background */}
         <div
@@ -425,212 +426,106 @@ export default function InteractiveLanding({
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#18181b_1px,transparent_1px),linear-gradient(to_bottom,#18181b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_70%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-45"
         />
 
+        {/* Ambient Floating Emerald & Gold Gradient Shapes */}
+        <motion.div
+          aria-hidden="true"
+          animate={{ y: [0, -16, 0], x: [0, 10, 0] }}
+          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+          className="pointer-events-none absolute -top-20 left-1/4 h-80 w-80 rounded-full bg-emerald-600/12 dark:bg-emerald-500/15 blur-3xl"
+        />
+        <motion.div
+          aria-hidden="true"
+          animate={{ y: [0, 18, 0], x: [0, -12, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+          className="pointer-events-none absolute top-28 right-10 h-72 w-72 rounded-full bg-[#D4AF37]/15 dark:bg-[#D4AF37]/12 blur-3xl"
+        />
+
         <div className="relative max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
           {/* Left Column: Headline & Primary CTAs */}
-          <div className="lg:col-span-6 text-left space-y-6">
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
-              <span>{BRAND.getTagline(language)}</span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:col-span-6 text-left space-y-6"
+          >
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#064E3B] dark:text-[#D4AF37]">
+              <span>MeezanFlow Financial Suite</span>
               <span aria-hidden="true">·</span>
-              <span>{language === 'en' ? 'PKR Financial Suite' : 'پاکستانی کاروبار کے لیے'}</span>
+              <span>{language === 'en' ? 'Intelligent Business Ledger' : 'پاکستانی کاروبار کے لیے'}</span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold text-slate-900 dark:text-white tracking-tight leading-[1.1] text-balance">
+            <h1 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold text-slate-900 dark:text-white tracking-tight leading-[1.08] text-balance">
               {language === 'en' ? (
                 <>
-                  Balance Your Business.{' '}
-                  <span className="text-[#0B192C] dark:text-[#D4AF37] underline decoration-[#D4AF37] decoration-2 underline-offset-8">
-                    Flow With Confidence.
+                  Every Account.{' '}
+                  <span className="text-[#064E3B] dark:text-[#10B981] underline decoration-[#D4AF37] decoration-2 underline-offset-8">
+                    Perfectly Balanced.
                   </span>
                 </>
               ) : (
                 <>
-                  اپنے کاروبار میں توازن لائیں۔{' '}
-                  <span className="text-[#0B192C] dark:text-[#D4AF37]">اعتماد کے ساتھ آگے بڑھیں۔</span>
+                  ہر کھاتا۔{' '}
+                  <span className="text-[#064E3B] dark:text-[#D4AF37]">مکمل توازن کے ساتھ۔</span>
                 </>
               )}
             </h1>
 
             <p className="text-base sm:text-lg text-slate-600 dark:text-zinc-300 leading-relaxed max-w-xl">
               {language === 'en'
-                ? `${BRAND.name} brings precision bookkeeping, customer credit folders, daily cash flow, and supplier accounts into one modern financial management platform.`
+                ? `${BRAND.name} brings precision customer account management, credit & debit ledgers, promised payment reminders, and printable PDF statements into one refined fintech workspace.`
                 : `${BRAND.name} کے ساتھ ادھار کا حساب رکھیں، ادائیگیاں ٹریک کریں، گاہکوں کے فولڈرز منظم کریں اور اپنے کاروبار کو وسعت دیں۔`}
             </p>
 
             {/* Primary & Secondary CTAs */}
             <div className="pt-2 flex flex-wrap items-center gap-3.5">
-              <button
+              <motion.button
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => onOpenAuth('signup')}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[#0B192C] hover:bg-[#132847] dark:bg-[#D4AF37] dark:hover:bg-[#C5A028] text-white dark:text-[#0B192C] font-semibold text-sm shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-meezan-btn text-white font-bold text-sm shadow-md transition-all cursor-pointer whitespace-nowrap"
               >
-                <span>{language === 'en' ? 'Get Started Free' : 'مفت اکاؤنٹ بنائیں'}</span>
+                <span>{language === 'en' ? 'Get Started' : 'مفت اکاؤنٹ بنائیں'}</span>
                 <ArrowRight className="h-4 w-4" />
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 type="button"
-                onClick={() => scrollToSection('features')}
+                onClick={() => onOpenAuth('login')}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-semibold text-sm transition-all cursor-pointer whitespace-nowrap"
               >
-                <span>{language === 'en' ? 'Explore Features' : 'خصوصیات دیکھیں'}</span>
-              </button>
+                <span>{language === 'en' ? 'Login to Account' : 'لاگ ان کریں'}</span>
+              </motion.button>
             </div>
 
             {/* Quiet Unboxed Metadata */}
             <div className="pt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500 dark:text-zinc-400">
               <span>{language === 'en' ? 'Cloud-synced ledgers' : 'کلاؤڈ بیک اپ'}</span>
               <span aria-hidden="true">·</span>
-              <span>{language === 'en' ? 'English & Urdu interface' : 'اردو اور انگریزی سپورٹ'}</span>
+              <span>{language === 'en' ? 'WhatsApp PDF statements' : 'واٹس ایپ پی ڈی ایف رپورٹ'}</span>
               <span aria-hidden="true">·</span>
               <span>{language === 'en' ? 'Firebase Authentication' : 'فائر بیس سیکیورٹی'}</span>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right Column: Product Dashboard Preview (Clean Zero-State Workspace) */}
-          <div className="lg:col-span-6">
-            <div className="rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden text-left">
-              {/* Preview Window Top Header */}
-              <div className="px-5 py-3.5 bg-[#0B192C] text-white border-b border-slate-800 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2.5">
-                  <MeezanFlowLogo size="sm" />
-                  <span className="text-xs font-bold text-white">
-                    {BRAND.name}
-                  </span>
-                  <span className="text-slate-600" aria-hidden="true">
-                    /
-                  </span>
-                  <span className="text-[11px] text-slate-300">
-                    {language === 'en' ? 'Financial Overview' : 'ڈیش بورڈ کا منظر'}
-                  </span>
-                </div>
-                <span className="text-[11px] font-mono text-[#D4AF37] font-semibold tabular-nums">
-                  PKR
-                </span>
-              </div>
-
-              <div className="p-5 space-y-5">
-                {/* Summary KPI Strip */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 mb-1">
-                      <span>{language === 'en' ? 'Total Receivables' : 'کل واجب الادا'}</span>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-white tabular-nums">
-                      Rs 0
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                      {language === 'en' ? 'Customer credit ledger' : 'گاہک ادھار کھاتا'}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 mb-1">
-                      <span>{language === 'en' ? 'Collections' : 'وصولیاں'}</span>
-                      <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
-                    </div>
-                    <div className="text-sm sm:text-base font-bold font-mono text-emerald-700 dark:text-emerald-400 tabular-nums">
-                      Rs 0
-                    </div>
-                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5 font-medium">
-                      {language === 'en' ? 'Payments received' : 'وصول شدہ رقوم'}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 mb-1">
-                      <span>{language === 'en' ? 'Cash Drawer' : 'نقد گلہ بیلنس'}</span>
-                      <Wallet className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
-                    </div>
-                    <div className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-white tabular-nums">
-                      Rs 0
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                      {language === 'en' ? 'Net counter cash' : 'موجودہ نقد رقم'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Financial Analytics Overview */}
-                <div className="p-4 rounded-xl border border-slate-200/70 dark:border-zinc-800 bg-[#F8FAFC] dark:bg-zinc-950">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div>
-                      <h2 className="text-xs font-bold text-slate-900 dark:text-white">
-                        {language === 'en' ? 'Receivables vs. Collections Trend' : 'ادھار اور وصولی کا موازنہ'}
-                      </h2>
-                      <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                        {language === 'en'
-                          ? 'Real-time analytics populate automatically as you record transactions'
-                          : 'لین دین درج کرنے پر گراف خودکار طریقے سے اپ ڈیٹ ہوتا ہے'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-zinc-400">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-xs bg-slate-300 dark:bg-zinc-700" />
-                        <span>{language === 'en' ? 'Credit Issued' : 'ادھار'}</span>
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-xs bg-emerald-700 dark:bg-emerald-500" />
-                        <span>{language === 'en' ? 'Collected' : 'وصولی'}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="h-24 flex items-center justify-center rounded-lg border border-dashed border-slate-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/50 px-4 text-center">
-                    <span className="text-xs text-slate-500 dark:text-zinc-400">
-                      {language === 'en'
-                        ? 'Sign in to view your live daily cash flow and net profit charts.'
-                        : 'اپنے کاروبار کا روزانہ کیش فلو اور منافع کا گراف دیکھنے کے لیے لاگ ان کریں۔'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Recent Ledger Transactions Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      {language === 'en' ? 'Recent Customer Ledger Entries' : 'حالیہ کھاتا اندراجات'}
-                    </span>
-
-                    {/* Segmented Control */}
-                    <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-zinc-950 rounded-lg border border-slate-200/70 dark:border-zinc-800">
-                      {(
-                        [
-                          { id: 'all', label: language === 'en' ? 'All' : 'تمام' },
-                          { id: 'due', label: language === 'en' ? 'Due' : 'واجب الادا' },
-                          { id: 'paid', label: language === 'en' ? 'Paid' : 'ادا شدہ' }
-                        ] as const
-                      ).map((tab) => (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => setPreviewFilter(tab.id)}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                            previewFilter === tab.id
-                              ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-2xs'
-                              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="border border-slate-200/80 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 p-6 text-center space-y-2">
-                    <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
-                      {language === 'en' ? 'Your Digital Ledger is Ready' : 'آپ کا ڈیجیٹل کھاتا تیار ہے'}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-sm mx-auto leading-relaxed">
-                      {language === 'en'
-                        ? 'Create an account or sign in to add customers, record credit (Udhaar) and cash payments, and track real-time balances.'
-                        : 'گاہک شامل کرنے، ادھار اور نقد وصولی درج کرنے اور بقایا جات ٹریک کرنے کے لیے لاگ ان کریں۔'}
-                    </p>
-                  </div>
-                </div>
-              </div>
+          {/* Right Column: Meezan Flow Promotional Image */}
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:col-span-6"
+          >
+            <div className="rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xl overflow-hidden">
+              <img
+                src="/assets/aistudio/Shopkeeper_Promoting_Meezan_Flow_Card_b6c05299.png"
+                alt="Meezan Flow — Smart Digital Khata & Business Ledger"
+                className="w-full h-auto object-cover block"
+                loading="eager"
+              />
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -638,7 +533,7 @@ export default function InteractiveLanding({
       <section className="py-12 px-4 sm:px-8 bg-white dark:bg-zinc-900 border-y border-slate-200/80 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-[#0B192C]/5 dark:bg-[#D4AF37]/15 border border-[#0B192C]/15 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#0B192C] dark:text-[#D4AF37] shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
               <BookOpen className="h-5 w-5" />
             </div>
             <div>
@@ -654,7 +549,7 @@ export default function InteractiveLanding({
           </div>
 
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-[#0B192C]/5 dark:bg-[#D4AF37]/15 border border-[#0B192C]/15 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#0B192C] dark:text-[#D4AF37] shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
               <Lock className="h-5 w-5" />
             </div>
             <div>
@@ -670,7 +565,7 @@ export default function InteractiveLanding({
           </div>
 
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-[#0B192C]/5 dark:bg-[#D4AF37]/15 border border-[#0B192C]/15 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#0B192C] dark:text-[#D4AF37] shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
               <MessageSquare className="h-5 w-5" />
             </div>
             <div>
@@ -679,7 +574,7 @@ export default function InteractiveLanding({
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 mt-1 leading-relaxed">
                 {language === 'en'
-                  ? 'Identify overdue customer balances immediately and send formatted WhatsApp or SMS payment statements in seconds.'
+                  ? 'Set promised payment dates, track overdue balances, and dispatch bulk WhatsApp or SMS statements in seconds.'
                   : 'واجب الادا رقوم کی فوری نشاندہی کریں اور سیکنڈز میں واٹس ایپ یا ایس ایم ایس کے ذریعے یاد دہانی بھیجیں۔'}
               </p>
             </div>
@@ -690,7 +585,7 @@ export default function InteractiveLanding({
       {/* 4. FEATURES SECTION */}
       <section id="features" className="py-20 lg:py-24 px-4 sm:px-8 max-w-7xl mx-auto">
         <div className="max-w-2xl text-left mb-12 space-y-3">
-          <div className="text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
+          <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
             {language === 'en' ? 'Core Platform Capabilities' : 'پلیٹ فارم کی بنیادی خصوصیات'}
           </div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
@@ -709,12 +604,17 @@ export default function InteractiveLanding({
           {features.map((feat, idx) => {
             const Icon = feat.icon;
             return (
-              <div
+              <motion.div
                 key={idx}
-                className="group bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between hover:border-[#0B192C]/40 dark:hover:border-[#D4AF37]/50 transition-all duration-150"
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.35, delay: idx * 0.05 }}
+                whileHover={{ y: -4 }}
+                className="group bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between hover:border-[#059669]/50 dark:hover:border-[#D4AF37]/50 hover:shadow-md transition-all duration-150"
               >
                 <div className="space-y-4">
-                  <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-zinc-800 group-hover:bg-[#0B192C] dark:group-hover:bg-[#D4AF37]/20 text-slate-800 dark:text-zinc-200 group-hover:text-[#D4AF37] dark:group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-zinc-800 group-hover:bg-[#064E3B] dark:group-hover:bg-[#D4AF37]/20 text-[#064E3B] dark:text-zinc-200 group-hover:text-[#D4AF37] dark:group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
@@ -727,9 +627,9 @@ export default function InteractiveLanding({
 
                 <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs font-medium text-slate-500 dark:text-zinc-400">
                   <span>{feat.detail}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-[#0B192C] dark:group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-[#059669] dark:group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -1052,9 +952,9 @@ export default function InteractiveLanding({
       </section>
 
       {/* 8. FINAL CTA SECTION */}
-      <section className="py-20 px-4 sm:px-8 bg-[#F8FAFC] dark:bg-zinc-950 border-t border-slate-200/80 dark:border-zinc-800">
-        <div className="max-w-4xl mx-auto bg-[#0B192C] text-white rounded-2xl border border-[#1E3A5F] p-8 sm:p-12 text-center shadow-xs space-y-6">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#D4AF37]">
+      <section className="py-20 px-4 sm:px-8 bg-[#FAF9F6] dark:bg-zinc-950 border-t border-slate-200/80 dark:border-zinc-800">
+        <div className="max-w-4xl mx-auto bg-meezan-header text-white rounded-3xl border border-emerald-700/40 p-8 sm:p-12 text-center shadow-lg space-y-6">
+          <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#D4AF37]">
             <span>{BRAND.getTagline(language)}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight text-balance">
@@ -1062,7 +962,7 @@ export default function InteractiveLanding({
               ? 'Ready to balance your business accounts?'
               : 'کیا آپ اپنے کاروباری حساب کتاب کو متوازن بنانے کے لیے تیار ہیں؟'}
           </h2>
-          <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
+          <p className="text-sm sm:text-base text-emerald-100 max-w-xl mx-auto leading-relaxed">
             {language === 'en'
               ? `Create your ${BRAND.name} workspace today to organize customer ledgers, track payments, and keep your business operations flowing smoothly.`
               : `آج ہی اپنا ${BRAND.name} اکاؤنٹ بنائیں اور گاہکوں کے کھاتے، وصولیاں اور کاروباری ریکارڈ کو محفوظ طریقے سے منظم کریں۔`}
@@ -1071,17 +971,17 @@ export default function InteractiveLanding({
             <button
               type="button"
               onClick={() => onOpenAuth('signup')}
-              className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-[#0B192C] font-bold text-sm shadow-xs transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-[#042F24] font-extrabold text-sm shadow-xs transition-all cursor-pointer whitespace-nowrap"
             >
-              <span>{language === 'en' ? 'Get Started Free' : 'مفت اکاؤنٹ بنائیں'}</span>
+              <span>{language === 'en' ? 'Get Started' : 'مفت اکاؤنٹ بنائیں'}</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => onOpenAuth('login')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-white font-semibold text-sm transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-emerald-600/60 bg-emerald-950/60 hover:bg-emerald-900/70 text-white font-semibold text-sm transition-all cursor-pointer whitespace-nowrap"
             >
-              <span>{language === 'en' ? 'Sign In' : 'لاگ ان کریں'}</span>
+              <span>{language === 'en' ? 'Login' : 'لاگ ان کریں'}</span>
             </button>
           </div>
         </div>

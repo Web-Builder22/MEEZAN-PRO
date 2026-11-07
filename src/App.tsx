@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, 
   Users, 
@@ -12,6 +13,10 @@ import {
   Trash2, 
   MessageSquare, 
   CheckCircle, 
+  CheckCircle2,
+  Clock,
+  FileText,
+  Calendar,
   X, 
   AlertTriangle, 
   RefreshCw, 
@@ -33,10 +38,18 @@ import {
   Globe,
   Star,
   ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  CalendarClock,
   Send,
   Menu,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  BarChart3,
+  Settings,
+  LogOut,
+  ShoppingBag
 } from 'lucide-react';
 import { api } from './api';
 import { translations, Language } from './translations';
@@ -59,8 +72,14 @@ import InteractiveLanding from './components/InteractiveLanding';
 import AuthPages, { AuthScreenMode } from './components/AuthPages';
 import DebtSummary from './components/DebtSummary';
 import CustomerFolderSystem from './components/CustomerFolderSystem';
+import CustomerAccountReportModal from './components/CustomerAccountReportModal';
+import BusinessDashboard, { AppTab } from './components/BusinessDashboard';
+import VoiceDescriptionField, {
+  TransactionDescriptionView,
+  formatPlainDescriptionText
+} from './components/VoiceTransactionInput';
 import Footer from './components/Footer';
-import { BRAND, MeezanFlowLogo } from './brand';
+import { BRAND, MeezanFlowLogo, PartyAvatar } from './brand';
 import { 
   auth, 
   googleProvider, 
@@ -97,13 +116,28 @@ export default function App() {
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isInStandaloneMode, setIsInStandaloneMode] = useState(false);
 
-  // App Layout States
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'suppliers' | 'cashbook' | 'inventory' | 'invoices'>('dashboard');
+  // App Layout States - Default to 'dashboard'
+  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
+  const [paymentSubTab, setPaymentSubTab] = useState<'transactions' | 'cashbook'>('transactions');
+  const [hideBalance, setHideBalance] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isInvMenuOpen, setIsInvMenuOpen] = useState<boolean>(false);
+
+  // Keep "Inventory & Invoices" parent menu expanded whenever Inventory or Invoices is active
+  useEffect(() => {
+    if (activeTab === 'inventory' || activeTab === 'invoices') {
+      setIsInvMenuOpen(true);
+    }
+  }, [activeTab]);
   const [language, setLanguage] = useState<Language>(() => {
     return (localStorage.getItem('lang') as Language) || 'en';
   });
+
+  // Settings form state
+  const [settingsName, setSettingsName] = useState(user?.name || '');
+  const [settingsBusiness, setSettingsBusiness] = useState(user?.businessName || '');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Business Data States
   const [stats, setStats] = useState<FinancialStats | null>(null);
@@ -123,6 +157,9 @@ export default function App() {
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOption, setFilterOption] = useState('all');
+
+  // Dashboard Report Modal state
+  const [dashboardReportCustomer, setDashboardReportCustomer] = useState<Customer | null>(null);
 
   // Modals / Drawers Open state
   const [activeModal, setActiveModal] = useState<
@@ -287,9 +324,48 @@ export default function App() {
   // Trigger sync on login or role swap
   useEffect(() => {
     if (user) {
+      setSettingsName(user.name || '');
+      setSettingsBusiness(user.businessName || '');
       fetchAllData();
     }
   }, [user]);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const trimmedName = settingsName.trim() || user.name;
+    const trimmedBus = settingsBusiness.trim() || user.businessName;
+    setIsSavingSettings(true);
+    try {
+      const updatedUser = await api.firebaseLogin({
+        email: user.email,
+        name: trimmedName,
+        uid: user.id,
+        role: user.role,
+        businessName: trimmedBus
+      });
+      setUser(updatedUser);
+      localStorage.setItem('user_session', JSON.stringify(updatedUser));
+      triggerAlert(
+        language === 'en'
+          ? 'Your business profile and account settings have been saved.'
+          : 'آپ کی دکان اور پروفائل کی ترتیبات محفوظ ہو گئی ہیں۔',
+        language === 'en' ? 'Settings Saved' : 'محفوظ شدہ'
+      );
+    } catch (err: any) {
+      const fallbackUser = { ...user, name: trimmedName, businessName: trimmedBus };
+      setUser(fallbackUser);
+      localStorage.setItem('user_session', JSON.stringify(fallbackUser));
+      triggerAlert(
+        language === 'en'
+          ? 'Settings saved locally.'
+          : 'ترتیبات محفوظ ہو گئیں۔',
+        language === 'en' ? 'Saved' : 'محفوظ شدہ'
+      );
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   // Handle Progressive Web App (PWA) installation hooks
   useEffect(() => {
@@ -1131,7 +1207,7 @@ export default function App() {
 
                     <div className="w-full text-left bg-slate-50 dark:bg-zinc-950 p-4 rounded-xl border border-slate-200/80 dark:border-zinc-800 space-y-3 mb-5">
                       <div className="flex gap-2.5 items-start">
-                        <span className="h-5 w-5 font-bold text-[10px] bg-[#0B192C] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
+                        <span className="h-5 w-5 font-bold text-[10px] bg-[#042F24] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
                           1
                         </span>
                         <p className="text-xs text-slate-700 dark:text-zinc-300 font-medium pt-0.5">
@@ -1141,7 +1217,7 @@ export default function App() {
                         </p>
                       </div>
                       <div className="flex gap-2.5 items-start">
-                        <span className="h-5 w-5 font-bold text-[10px] bg-[#0B192C] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
+                        <span className="h-5 w-5 font-bold text-[10px] bg-[#042F24] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
                           2
                         </span>
                         <p className="text-xs text-slate-700 dark:text-zinc-300 font-medium pt-0.5">
@@ -1165,7 +1241,7 @@ export default function App() {
                         </p>
                       </div>
                       <div className="flex gap-2.5 items-start">
-                        <span className="h-5 w-5 font-bold text-[10px] bg-[#0B192C] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
+                        <span className="h-5 w-5 font-bold text-[10px] bg-[#042F24] text-[#D4AF37] rounded-full flex items-center justify-center shrink-0">
                           3
                         </span>
                         <p className="text-xs text-slate-700 dark:text-zinc-300 font-medium pt-0.5">
@@ -1179,7 +1255,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setShowIosInstruction(false)}
-                      className="w-full py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#132847] text-white text-xs font-semibold transition-all cursor-pointer"
+                      className="w-full py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-semibold transition-all cursor-pointer"
                     >
                       {language === 'en' ? 'Got It' : 'ٹھیک ہے'}
                     </button>
@@ -1189,243 +1265,507 @@ export default function App() {
             )}
           </>
         ) : (
-          <div className="flex-1 bg-[#F8FAFC] dark:bg-zinc-950 flex flex-col min-w-0">
-            {/* Top Main Navigation Header */}
-            <header className="bg-white dark:bg-zinc-900 border-b border-slate-200/80 dark:border-zinc-800 sticky top-0 z-40 px-3 sm:px-6">
-              <div className="flex justify-between h-16 items-center max-w-7xl mx-auto gap-2">
-                {/* Left: Mobile Hamburger + Logo Brand */}
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <button
-                    type="button"
-                    id="mobile-menu-toggle-btn"
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    aria-label="Open navigation menu"
-                    className="md:hidden p-2 -ml-1 rounded-xl text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </button>
-
-                  <MeezanFlowLogo size={36} className="shrink-0" />
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight truncate leading-none">
-                        {BRAND.name}
-                      </h1>
-                      <span className="hidden xs:inline-block text-[10px] font-mono font-bold text-[#9A7B1C] dark:text-[#D4AF37] bg-[#D4AF37]/15 px-1.5 py-0.5 rounded border border-[#D4AF37]/30 shrink-0">
-                        PRO
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium mt-0.5 max-w-[180px] sm:max-w-xs truncate">
-                      {user.businessName}
-                      <span className="hidden sm:inline"> • {lastSync ? `Synced ${lastSync}` : 'Cloud Ledger'}</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right: Core Settings & Profile Controls */}
-                <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-                  {/* PWA Install Button */}
-                  {(showInstallBtn || (!isInStandaloneMode && (typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !(window as any).MSStream))) && (
+          <div className="flex-1 bg-[#FAF9F6] dark:bg-zinc-950 flex flex-col min-w-0">
+            {/* Top Deep Emerald & Forest Green Fintech Header */}
+            <header className="bg-meezan-header text-white sticky top-0 z-40 shadow-md border-b border-emerald-900/40">
+              <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-3 pb-2">
+                <div className="flex justify-between items-center gap-2">
+                  {/* Left: Mobile Hamburger + Back Button + Brand Title */}
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                     <button
                       type="button"
-                      onClick={handleInstallClick}
-                      title={t.installDesc}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#0B192C] dark:text-[#D4AF37] text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                      id="mobile-menu-toggle-btn"
+                      onClick={() => setIsMobileMenuOpen(true)}
+                      aria-label="Open navigation menu"
+                      className="md:hidden p-2 -ml-1 rounded-xl text-white hover:bg-white/15 transition-colors cursor-pointer shrink-0"
                     >
-                      <Download className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">{t.installApp}</span>
+                      <Menu className="h-5 w-5" />
                     </button>
-                  )}
 
-                  {isSyncing ? (
-                    <div className="p-2">
-                      <RefreshCw className="h-4 w-4 text-[#D4AF37] animate-spin shrink-0" />
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={fetchAllData}
-                      title={language === 'en' ? 'Sync Ledger' : 'ریفریش کریں'}
-                      className="p-2 text-slate-500 hover:text-[#0B192C] dark:text-zinc-400 dark:hover:text-[#D4AF37] rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                  )}
-
-                  <div className="hidden sm:block">
-                    <LanguageToggle language={language} setLanguage={setLanguage} />
-                  </div>
-                  <ThemeToggle />
-
-                  <div className="hidden sm:block h-7 w-[1px] bg-slate-200 dark:bg-zinc-800 mx-0.5"></div>
-
-                  {/* User Profile & Logout (Desktop/Tablet) */}
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="text-right hidden lg:block">
-                      <p className="text-xs font-bold text-slate-800 dark:text-zinc-200 truncate max-w-[140px]">{user.name}</p>
-                      <p className="text-[10px] text-[#9A7B1C] dark:text-[#D4AF37] font-mono font-bold capitalize">
-                        {t[user.role.toLowerCase() as 'owner' | 'manager' | 'employee']}
-                      </p>
-                    </div>
-                    <button
-                      id="logout-btn"
-                      onClick={handleLogout}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 transition-all cursor-pointer shadow-2xs"
-                    >
-                      {t.logout}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </header>
-
-            {/* Mobile Slide-Over Navigation Drawer (< md) */}
-            {isMobileMenuOpen && (
-              <div className="md:hidden fixed inset-0 z-50 flex">
-                <div
-                  className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                />
-                <div className="relative z-10 w-72 max-w-[85vw] bg-white dark:bg-zinc-900 h-full shadow-2xl border-r border-slate-200 dark:border-zinc-800 flex flex-col justify-between p-4 overflow-y-auto">
-                  <div className="space-y-5">
-                    {/* Drawer Header */}
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <MeezanFlowLogo size={34} />
-                        <div className="min-w-0">
-                          <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate">{BRAND.name}</p>
-                          <p className="text-[10px] text-slate-400 truncate">{BRAND.tagline}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-
-                    {/* Signed-In User Card */}
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800">
-                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{user.name}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">{user.businessName}</p>
-                      <span className="inline-block mt-1.5 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#0B192C] text-[#D4AF37] capitalize">
-                        {t[user.role.toLowerCase() as 'owner' | 'manager' | 'employee']}
-                      </span>
-                    </div>
-
-                    {/* Navigation Links */}
-                    <div className="space-y-1">
-                      {[
-                        { id: 'dashboard', name: t.dashboard, icon: TrendingUp },
-                        { id: 'customers', name: t.customers, icon: Users },
-                        { id: 'suppliers', name: t.suppliers, icon: Truck },
-                        { id: 'cashbook', name: t.cashBook, icon: Wallet },
-                        { id: 'inventory', name: t.inventory, icon: Package },
-                        { id: 'invoices', name: t.invoices, icon: FileSpreadsheet }
-                      ].map((item) => {
-                        const IconComponent = item.icon;
-                        const isSelected = activeTab === item.id;
-                        return (
-                          <button
-                            key={`drawer-${item.id}`}
-                            type="button"
-                            onClick={() => {
-                              setActiveTab(item.id as any);
-                              setSearchTerm('');
-                              setFilterOption('all');
-                              if (item.id === 'customers') {
-                                setSelectedCustomerId(null);
-                              }
-                              setIsMobileMenuOpen(false);
-                            }}
-                            className={`flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl w-full text-left transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#0B192C] text-white dark:bg-[#D4AF37] dark:text-[#0B192C] shadow-xs'
-                                : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
-                            }`}
-                          >
-                            <IconComponent className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#D4AF37] dark:text-[#0B192C]' : ''}`} />
-                            <span className="truncate">{item.name}</span>
-                            {item.id === 'inventory' && lowStockItems.length > 0 && (
-                              <span className="rtl:mr-auto ltr:ml-auto bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                                {lowStockItems.length}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {user.role === 'Owner' && (
-                      <div className="pt-2 border-t border-slate-100 dark:border-zinc-800">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsMobileMenuOpen(false);
-                            setActiveModal('backups');
-                          }}
-                          className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:border-[#0B192C] dark:hover:border-[#D4AF37] text-xs font-semibold cursor-pointer"
-                        >
-                          <Database className="h-3.5 w-3.5 text-[#D4AF37]" />
-                          <span>{language === 'en' ? 'Backups & Recovery Hub' : 'بیک اپ اور بحالی مرکز'}</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Drawer Footer Controls */}
-                  <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
-                        {language === 'en' ? 'Language' : 'زبان'}
-                      </span>
-                      <LanguageToggle language={language} setLanguage={setLanguage} />
-                    </div>
-
-                    {(showInstallBtn || (!isInStandaloneMode && (typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !(window as any).MSStream))) && (
+                    {(selectedCustomerId !== null || activeTab !== 'dashboard') ? (
                       <button
                         type="button"
                         onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          handleInstallClick();
+                          if (selectedCustomerId !== null) {
+                            setSelectedCustomerId(null);
+                          } else {
+                            setActiveTab('dashboard');
+                          }
                         }}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#0B192C] dark:text-[#D4AF37] text-xs font-bold cursor-pointer"
+                        aria-label="Back"
+                        className="p-1.5 rounded-xl text-white hover:bg-white/15 transition-colors cursor-pointer shrink-0"
+                      >
+                        <ArrowLeft className="h-5 w-5" />
+                      </button>
+                    ) : (
+                      <MeezanFlowLogo size={36} className="shrink-0 hidden sm:inline-flex" />
+                    )}
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h1 className="text-lg sm:text-xl font-black text-white tracking-tight truncate leading-none">
+                          {activeTab === 'dashboard'
+                            ? (language === 'en' ? `${BRAND.name} Dashboard` : 'میزان فلو ڈیش بورڈ')
+                            : activeTab === 'invoices'
+                            ? (language === 'en' ? 'Sales & Invoices' : 'فروخت اور بلز')
+                            : activeTab === 'inventory'
+                            ? (language === 'en' ? 'Products & Inventory' : 'مصنوعات اور اسٹاک')
+                            : activeTab === 'customers'
+                            ? (language === 'en' ? 'Customer Accounts' : 'گاہک کھاتہ')
+                            : activeTab === 'suppliers'
+                            ? (language === 'en' ? 'Supplier Accounts' : 'سپلائر کھاتہ')
+                            : activeTab === 'cashbook'
+                            ? (language === 'en' ? 'Payments & Transactions' : 'ادائیگیاں اور لین دین')
+                            : activeTab === 'reports'
+                            ? (language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات')
+                            : (language === 'en' ? 'Settings & Preferences' : 'ترتیبات')}
+                        </h1>
+                      </div>
+                      <p className="text-[10px] text-emerald-100/85 font-semibold mt-0.5 max-w-[200px] sm:max-w-xs truncate">
+                        {user.businessName}
+                        <span className="hidden sm:inline"> • {lastSync ? `Synced ${lastSync}` : BRAND.tagline}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right: COLLECTION Gold Badge + Settings & Profile Controls */}
+                  <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                    {/* COLLECTION Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('reports');
+                        setSelectedCustomerId(null);
+                        setTimeout(() => {
+                          const el = document.getElementById('debt-summary-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }, 100);
+                      }}
+                      className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-meezan-collection text-xs sm:text-xs font-extrabold cursor-pointer transition-transform active:scale-95"
+                    >
+                      <CalendarClock className="h-3.5 w-3.5 text-[#042F24] shrink-0" />
+                      <span className="tracking-wider uppercase text-[11px] font-black text-[#042F24]">
+                        {language === 'en' ? 'COLLECTION' : 'وصولی'}
+                      </span>
+                    </button>
+
+                    {/* PWA Install Button */}
+                    {(showInstallBtn || (!isInStandaloneMode && (typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !(window as any).MSStream))) && (
+                      <button
+                        type="button"
+                        onClick={handleInstallClick}
+                        title={t.installDesc}
+                        className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-extrabold border border-white/25 transition-all cursor-pointer"
                       >
                         <Download className="h-3.5 w-3.5" />
                         <span>{t.installApp}</span>
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        handleLogout();
-                      }}
-                      className="w-full py-2.5 rounded-xl border border-red-200 dark:border-red-950 bg-red-50/60 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
-                    >
-                      {t.logout}
-                    </button>
+                    {isSyncing ? (
+                      <div className="p-2">
+                        <RefreshCw className="h-4 w-4 text-[#D4AF37] animate-spin shrink-0" />
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={fetchAllData}
+                        title={language === 'en' ? 'Sync Ledger' : 'ریفریش کریں'}
+                        className="p-2 text-white/90 hover:text-white rounded-xl hover:bg-white/15 transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </button>
+                    )}
+
+                    <div className="hidden sm:block">
+                      <LanguageToggle language={language} setLanguage={setLanguage} />
+                    </div>
+                    <ThemeToggle />
+
+                    {/* User Profile & Logout (Desktop/Tablet) */}
+                    <div className="hidden sm:flex items-center gap-2">
+                      <button
+                        id="logout-btn"
+                        onClick={handleLogout}
+                        className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-extrabold text-white transition-all cursor-pointer"
+                      >
+                        {t.logout}
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Top Category Tabs Row */}
+                <div className="flex items-center justify-between sm:justify-start sm:gap-6 mt-3 pt-1 overflow-x-auto no-scrollbar border-b border-white/10">
+                  {[
+                    { id: 'dashboard', label: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ' },
+                    { id: 'invoices', label: language === 'en' ? 'Sales' : 'فروخت' },
+                    { id: 'inventory', label: language === 'en' ? 'Products' : 'مصنوعات' },
+                    { id: 'customers', label: language === 'en' ? 'Customers' : 'گاہک' },
+                    { id: 'suppliers', label: language === 'en' ? 'Suppliers' : 'سپلائرز' },
+                    { id: 'cashbook', label: language === 'en' ? 'Payments' : 'ادائیگیاں' },
+                    { id: 'reports', label: language === 'en' ? 'Reports' : 'رپورٹس' },
+                    { id: 'settings', label: language === 'en' ? 'Settings' : 'ترتیبات' },
+                  ].map((tabItem) => {
+                    const isActive = activeTab === tabItem.id;
+                    return (
+                      <button
+                        key={tabItem.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(tabItem.id as AppTab);
+                          setSearchTerm('');
+                          setFilterOption('all');
+                          if (tabItem.id === 'customers') {
+                            setSelectedCustomerId(null);
+                          }
+                        }}
+                        className={`relative pb-2.5 px-2 text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                          isActive ? 'text-white' : 'text-emerald-100/70 hover:text-white'
+                        }`}
+                      >
+                        <span className="tracking-wide">{tabItem.label}</span>
+                        {isActive && (
+                          <motion.span
+                            layoutId="headerTabUnderline"
+                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4AF37] rounded-t-full shadow-[0_-1px_6px_rgba(212,175,55,0.8)]"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </header>
+
+            {/* White Balance Summary Card (shown on non-dashboard views when not inside a specific customer folder) */}
+            {selectedCustomerId === null && activeTab !== 'dashboard' && activeTab !== 'settings' && (
+              <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 mt-3 sm:mt-4 mb-2 relative z-20">
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl shadow-[0_8px_30px_rgba(4,47,36,0.08)] border border-slate-200/80 dark:border-zinc-800 px-4 sm:px-6 py-3.5"
+                >
+                  {/* Top Bar: Total Customer Accounts + Hide Balance Toggle */}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-zinc-400">
+                      <Users className="h-3.5 w-3.5 text-[#059669]" />
+                      <span>
+                        {language === 'en'
+                          ? `${customers.length} Customer Accounts • ${suppliers.length} Suppliers`
+                          : `${customers.length} گاہک کھاتے • ${suppliers.length} سپلائرز`}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setHideBalance((prev) => !prev)}
+                      className="inline-flex items-center gap-1.5 text-xs font-extrabold cursor-pointer select-none text-slate-600 dark:text-zinc-400 hover:text-[#059669] transition-colors"
+                    >
+                      {hideBalance ? (
+                        <Eye className="h-3.5 w-3.5 stroke-[2.2]" />
+                      ) : (
+                        <EyeOff className="h-3.5 w-3.5 stroke-[2.2]" />
+                      )}
+                      <span>
+                        {hideBalance
+                          ? (language === 'en' ? 'Show Balance' : 'بیلنس دکھائیں')
+                          : (language === 'en' ? 'Hide Balance' : 'بیلنس چھپائیں')}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Two Equal Columns with Vertical Divider + Right Chevron */}
+                  <div className="flex items-center justify-between">
+                    <div className="grid grid-cols-2 flex-1 divide-x divide-slate-200 dark:divide-zinc-800">
+                      {/* Left Column: You will give (Payables) */}
+                      <div
+                        onClick={() => setActiveTab('suppliers')}
+                        className="pr-3 sm:pr-6 flex flex-col items-center justify-center text-center cursor-pointer group"
+                      >
+                        <span className="text-lg sm:text-2xl font-black text-payable-green dark:text-emerald-400 tracking-tight tabular-nums font-mono group-hover:scale-[1.02] transition-transform">
+                          {hideBalance ? 'Rs ••••' : `Rs ${(stats?.payables || 0).toLocaleString()}`}
+                        </span>
+                        <span className="text-xs sm:text-xs font-bold text-slate-500 dark:text-zinc-400 mt-0.5">
+                          {language === 'en' ? 'You will give (Payables)' : 'آپ نے دینے ہیں'}
+                        </span>
+                      </div>
+
+                      {/* Right Column: You will get (Receivables) */}
+                      <div
+                        onClick={() => setActiveTab('customers')}
+                        className="pl-3 sm:pl-6 flex flex-col items-center justify-center text-center cursor-pointer group"
+                      >
+                        <span className="text-lg sm:text-2xl font-black text-receivable-maroon dark:text-rose-400 tracking-tight tabular-nums font-mono group-hover:scale-[1.02] transition-transform">
+                          {hideBalance ? 'Rs ••••' : `Rs ${(stats?.receivables || 0).toLocaleString()}`}
+                        </span>
+                        <span className="text-xs sm:text-xs font-bold text-slate-500 dark:text-zinc-400 mt-0.5">
+                          {language === 'en' ? 'You will get (Receivables)' : 'آپ نے لینے ہیں'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('dashboard')}
+                      aria-label="View full summary"
+                      className="p-1.5 text-slate-600 dark:text-zinc-300 hover:bg-emerald-50 dark:hover:bg-zinc-800 hover:text-[#059669] rounded-full transition-colors cursor-pointer shrink-0 ml-1"
+                    >
+                      <ChevronRight className="h-5 w-5 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </motion.div>
               </div>
             )}
 
+            {/* Mobile Slide-Over Navigation Drawer (< md) */}
+            <AnimatePresence>
+              {isMobileMenuOpen && (
+                <div className="md:hidden fixed inset-0 z-50 flex">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ x: language === 'ur' ? 280 : -280 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: language === 'ur' ? 280 : -280 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+                    className="relative z-10 w-72 max-w-[85vw] bg-white dark:bg-zinc-900 h-full shadow-2xl border-r border-slate-200 dark:border-zinc-800 flex flex-col justify-between p-4 overflow-y-auto"
+                  >
+                    <div className="space-y-4">
+                      {/* Drawer Header */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <MeezanFlowLogo size={34} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-slate-900 dark:text-white truncate">{BRAND.name}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{BRAND.tagline}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      {/* Signed-In User Card */}
+                      <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-zinc-950 border border-emerald-200/70 dark:border-zinc-800">
+                        <p className="text-xs font-extrabold text-slate-900 dark:text-white truncate">{user.name}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">{user.businessName}</p>
+                        <span className="inline-block mt-1.5 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-meezan-header text-[#D4AF37] capitalize">
+                          {t[user.role.toLowerCase() as 'owner' | 'manager' | 'employee']}
+                        </span>
+                      </div>
+
+                      {/* Navigation Links */}
+                      <div className="space-y-1">
+                        {[
+                          { id: 'dashboard', name: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ', icon: TrendingUp },
+                          {
+                            id: 'inventory-invoices-group',
+                            name: language === 'en' ? 'Inventory & Invoices' : 'اسٹاک اور انوائسز',
+                            icon: ShoppingBag,
+                            children: [
+                              { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package },
+                              { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText }
+                            ]
+                          },
+                          { id: 'customers', name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
+                          { id: 'suppliers', name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
+                          { id: 'cashbook', name: language === 'en' ? 'Payments / Transactions' : 'ادائیگیاں اور لین دین', icon: Wallet },
+                          { id: 'reports', name: language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات', icon: BarChart3 },
+                          { id: 'settings', name: language === 'en' ? 'Settings' : 'ترتیبات', icon: Settings }
+                        ].map((item) => {
+                          const IconComponent = item.icon;
+
+                          if ('children' in item && item.children) {
+                            const isChildActive = activeTab === 'inventory' || activeTab === 'invoices';
+                            const isExpanded = isInvMenuOpen || isChildActive;
+
+                            return (
+                              <div key={`drawer-${item.id}`} className="space-y-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsInvMenuOpen((prev) => !prev)}
+                                  className={`flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
+                                    isChildActive
+                                      ? 'bg-emerald-50/90 dark:bg-emerald-950/40 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/50'
+                                      : 'text-slate-600 dark:text-zinc-400 hover:bg-emerald-50/60 dark:hover:bg-zinc-800'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-3 min-w-0">
+                                    <IconComponent className={`h-4 w-4 shrink-0 ${isChildActive ? 'text-[#059669]' : 'text-[#059669]'}`} />
+                                    <span className="truncate">{item.name}</span>
+                                  </span>
+                                  <span className="flex items-center gap-1.5 shrink-0">
+                                    {lowStockItems.length > 0 && (
+                                      <span className="bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                        {lowStockItems.length}
+                                      </span>
+                                    )}
+                                    <ChevronDown
+                                      className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
+                                        isExpanded ? 'rotate-180 text-[#059669]' : ''
+                                      }`}
+                                    />
+                                  </span>
+                                </button>
+
+                                <AnimatePresence initial={false}>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      className="overflow-hidden ltr:pl-4 rtl:pr-4 space-y-1"
+                                    >
+                                      <div className="ltr:border-l-2 rtl:border-r-2 border-emerald-200/70 dark:border-zinc-800 ltr:pl-2.5 rtl:pr-2.5 space-y-1 py-0.5">
+                                        {item.children.map((sub) => {
+                                          const SubIcon = sub.icon;
+                                          const isSubSelected = activeTab === sub.id;
+                                          return (
+                                            <button
+                                              key={`drawer-sub-${sub.id}`}
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveTab(sub.id);
+                                                setIsInvMenuOpen(true);
+                                                setSearchTerm('');
+                                                setFilterOption('all');
+                                                setIsMobileMenuOpen(false);
+                                              }}
+                                              className={`flex items-center gap-2.5 px-3 py-2 text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
+                                                isSubSelected
+                                                  ? 'bg-meezan-btn text-white shadow-xs'
+                                                  : 'text-slate-600 dark:text-zinc-400 hover:bg-emerald-50/60 dark:hover:bg-zinc-800'
+                                              }`}
+                                            >
+                                              <SubIcon
+                                                className={`h-3.5 w-3.5 shrink-0 ${
+                                                  isSubSelected ? 'text-[#D4AF37]' : 'text-[#059669]'
+                                                }`}
+                                              />
+                                              <span className="truncate">{sub.name}</span>
+                                              {sub.id === 'inventory' && lowStockItems.length > 0 && (
+                                                <span className="rtl:mr-auto ltr:ml-auto bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                                  {lowStockItems.length}
+                                                </span>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            );
+                          }
+
+                          const isSelected = activeTab === item.id;
+                          return (
+                            <button
+                              key={`drawer-${item.id}`}
+                              type="button"
+                              onClick={() => {
+                                setActiveTab(item.id as AppTab);
+                                setSearchTerm('');
+                                setFilterOption('all');
+                                if (item.id === 'customers') {
+                                  setSelectedCustomerId(null);
+                                }
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`flex items-center gap-3 px-3.5 py-2.5 text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-meezan-btn text-white shadow-xs'
+                                  : 'text-slate-600 dark:text-zinc-400 hover:bg-emerald-50/60 dark:hover:bg-zinc-800'
+                              }`}
+                            >
+                              <IconComponent className={`h-4 w-4 shrink-0 ${isSelected ? 'text-[#D4AF37]' : 'text-[#059669]'}`} />
+                              <span className="truncate">{item.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {user.role === 'Owner' && (
+                        <div className="pt-2 border-t border-slate-100 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMobileMenuOpen(false);
+                              setActiveModal('backups');
+                            }}
+                            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-dashed border-emerald-500/40 text-slate-700 dark:text-zinc-300 hover:border-[#059669] text-xs font-bold cursor-pointer"
+                          >
+                            <Database className="h-3.5 w-3.5 text-[#059669]" />
+                            <span>{language === 'en' ? 'Backups & Recovery Hub' : 'بیک اپ اور بحالی مرکز'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Drawer Footer Controls */}
+                    <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
+                          {language === 'en' ? 'Language' : 'زبان'}
+                        </span>
+                        <LanguageToggle language={language} setLanguage={setLanguage} />
+                      </div>
+
+                      {(showInstallBtn || (!isInStandaloneMode && (typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !(window as any).MSStream))) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMobileMenuOpen(false);
+                            handleInstallClick();
+                          }}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-50/60 text-[#064E3B] text-xs font-bold cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          <span>{t.installApp}</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 dark:border-red-950 bg-red-50/60 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        <span>{t.logout}</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
       {/* Main Grid Wrapper */}
-      <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 pb-24 md:py-6 md:pb-8 flex-1 flex flex-col md:flex-row gap-4 lg:gap-6 min-w-0">
+      <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 py-3 pb-24 md:py-5 md:pb-8 flex-1 flex flex-col md:flex-row gap-4 lg:gap-6 min-w-0">
 
         {/* Sidebar Nav Links (Collapsible on Tablet & Desktop) */}
         <nav
-          className={`hidden md:flex shrink-0 flex-col gap-1.5 transition-all duration-200 ${
-            isSidebarCollapsed ? 'w-20' : 'md:w-52 lg:w-64'
+          className={`hidden md:flex shrink-0 flex-col gap-1 transition-all duration-200 ${
+            isSidebarCollapsed ? 'w-20' : 'md:w-56 lg:w-64'
           }`}
         >
-          <div className="flex items-center justify-between px-2 mb-1">
+          <div className="flex items-center justify-between px-2 mb-1.5">
             {!isSidebarCollapsed && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
-                {language === 'en' ? 'Navigation' : 'مینو'}
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                {language === 'en' ? 'MAIN NAVIGATION' : 'مین مینو'}
               </span>
             )}
             <button
@@ -1443,21 +1783,163 @@ export default function App() {
           </div>
 
           {[
-            { id: 'dashboard', name: t.dashboard, icon: TrendingUp },
-            { id: 'customers', name: t.customers, icon: Users },
-            { id: 'suppliers', name: t.suppliers, icon: Truck },
-            { id: 'cashbook', name: t.cashBook, icon: Wallet },
-            { id: 'inventory', name: t.inventory, icon: Package },
-            { id: 'invoices', name: t.invoices, icon: FileSpreadsheet }
+            { id: 'dashboard', name: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ', icon: TrendingUp },
+            {
+              id: 'inventory-invoices-group',
+              name: language === 'en' ? 'Inventory & Invoices' : 'اسٹاک اور انوائسز',
+              icon: ShoppingBag,
+              children: [
+                { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package },
+                { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText }
+              ]
+            },
+            { id: 'customers', name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
+            { id: 'suppliers', name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
+            { id: 'cashbook', name: language === 'en' ? 'Payments / Transactions' : 'ادائیگیاں اور لین دین', icon: Wallet },
+            { id: 'reports', name: language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات', icon: BarChart3 },
+            { id: 'settings', name: language === 'en' ? 'Settings' : 'ترتیبات', icon: Settings }
           ].map((item) => {
             const IconComponent = item.icon;
+
+            if ('children' in item && item.children) {
+              const isChildActive = activeTab === 'inventory' || activeTab === 'invoices';
+              const isExpanded = isInvMenuOpen || isChildActive;
+
+              return (
+                <div key={item.id} className="space-y-1">
+                  <motion.button
+                    whileHover={{ x: isSidebarCollapsed ? 0 : 2 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    title={item.name}
+                    onClick={() => {
+                      if (isSidebarCollapsed) {
+                        setIsSidebarCollapsed(false);
+                        setIsInvMenuOpen(true);
+                      } else {
+                        setIsInvMenuOpen((prev) => !prev);
+                      }
+                    }}
+                    className={`relative flex items-center ${
+                      isSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'justify-between gap-3 px-4 py-2.5'
+                    } text-xs lg:text-sm font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
+                      isChildActive
+                        ? 'bg-emerald-50/90 dark:bg-emerald-950/40 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs'
+                        : 'text-slate-700 dark:text-zinc-400 hover:text-[#064E3B] dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-zinc-900 border border-transparent'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3 min-w-0">
+                      <IconComponent
+                        className={`h-[18px] w-[18px] shrink-0 ${
+                          isChildActive ? 'text-[#059669]' : 'text-[#059669]'
+                        }`}
+                      />
+                      {!isSidebarCollapsed && <span className="truncate">{item.name}</span>}
+                    </span>
+
+                    {!isSidebarCollapsed ? (
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        {lowStockItems.length > 0 && (
+                          <span className="bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            {lowStockItems.length}
+                          </span>
+                        )}
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isExpanded ? 'rotate-180 text-[#059669]' : 'text-slate-400'
+                          }`}
+                        />
+                      </span>
+                    ) : (
+                      lowStockItems.length > 0 && (
+                        <span className="absolute top-1.5 right-1.5 bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          {lowStockItems.length}
+                        </span>
+                      )
+                    )}
+                  </motion.button>
+
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className={`overflow-hidden ${
+                          isSidebarCollapsed ? 'space-y-1 pt-0.5' : 'ltr:pl-4 rtl:pr-4 space-y-1'
+                        }`}
+                      >
+                        <div
+                          className={
+                            isSidebarCollapsed
+                              ? 'space-y-1'
+                              : 'ltr:border-l-2 rtl:border-r-2 border-emerald-200/70 dark:border-zinc-800 ltr:pl-2.5 rtl:pr-2.5 space-y-1 py-0.5'
+                          }
+                        >
+                          {item.children.map((sub) => {
+                            const SubIcon = sub.icon;
+                            const isSubSelected = activeTab === sub.id;
+                            return (
+                              <motion.button
+                                whileHover={{ x: isSidebarCollapsed ? 0 : 2 }}
+                                whileTap={{ scale: 0.98 }}
+                                key={sub.id}
+                                type="button"
+                                title={sub.name}
+                                onClick={() => {
+                                  setActiveTab(sub.id);
+                                  setIsInvMenuOpen(true);
+                                  setSearchTerm('');
+                                  setFilterOption('all');
+                                }}
+                                className={`relative flex items-center ${
+                                  isSidebarCollapsed
+                                    ? 'justify-center px-2 py-2'
+                                    : 'gap-2.5 px-3.5 py-2'
+                                } text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
+                                  isSubSelected
+                                    ? 'bg-meezan-btn text-white shadow-sm'
+                                    : 'text-slate-600 dark:text-zinc-400 hover:text-[#064E3B] dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-zinc-900 border border-transparent'
+                                }`}
+                              >
+                                <SubIcon
+                                  className={`h-4 w-4 shrink-0 ${
+                                    isSubSelected ? 'text-[#D4AF37]' : 'text-[#059669]'
+                                  }`}
+                                />
+                                {!isSidebarCollapsed && <span className="truncate">{sub.name}</span>}
+                                {sub.id === 'inventory' && lowStockItems.length > 0 && (
+                                  <span
+                                    className={`${
+                                      isSidebarCollapsed
+                                        ? 'absolute top-1 right-1'
+                                        : 'rtl:mr-auto ltr:ml-auto'
+                                    } bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full`}
+                                  >
+                                    {lowStockItems.length}
+                                  </span>
+                                )}
+                              </motion.button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            }
+
             const isSelected = activeTab === item.id;
             return (
-              <button
+              <motion.button
+                whileHover={{ x: isSidebarCollapsed ? 0 : 2 }}
+                whileTap={{ scale: 0.98 }}
                 key={item.id}
                 title={item.name}
                 onClick={() => {
-                  setActiveTab(item.id as any);
+                  setActiveTab(item.id as AppTab);
                   setSearchTerm('');
                   setFilterOption('all');
                   if (item.id === 'customers') {
@@ -1465,48 +1947,53 @@ export default function App() {
                   }
                 }}
                 className={`relative flex items-center ${
-                  isSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
-                } text-xs lg:text-sm font-semibold rounded-2xl w-full text-left transition-all cursor-pointer ${
+                  isSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-4 py-2.5'
+                } text-xs lg:text-sm font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
                   isSelected 
-                    ? 'bg-[#0B192C] text-white dark:bg-[#D4AF37] dark:text-[#0B192C] shadow-xs ring-1 ring-[#0B192C] dark:ring-[#D4AF37]' 
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-[#0B192C] dark:hover:text-[#D4AF37] hover:bg-white dark:hover:bg-zinc-900 border border-transparent'
+                    ? 'bg-meezan-btn text-white shadow-sm' 
+                    : 'text-slate-700 dark:text-zinc-400 hover:text-[#064E3B] dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-zinc-900 border border-transparent'
                 }`}
               >
-                <IconComponent className={`h-[18px] w-[18px] shrink-0 ${isSelected ? 'text-[#D4AF37] dark:text-[#0B192C]' : ''}`} />
-                {!isSidebarCollapsed && <span className="truncate">{item.name}</span>}
-                {item.id === 'inventory' && lowStockItems.length > 0 && (
-                  <span
-                    className={`${
-                      isSidebarCollapsed
-                        ? 'absolute top-1.5 right-1.5'
-                        : 'rtl:mr-auto ltr:ml-auto'
-                    } bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full`}
-                  >
-                    {lowStockItems.length}
-                  </span>
+                <IconComponent className={`h-[18px] w-[18px] shrink-0 ${isSelected ? 'text-[#D4AF37]' : 'text-[#059669]'}`} />
+                {!isSidebarCollapsed && (
+                  <span className="truncate">{item.name}</span>
                 )}
-              </button>
+              </motion.button>
             );
           })}
 
-          {user.role === 'Owner' && (
-            <div className="mt-6 border-t border-slate-200/70 dark:border-zinc-800 pt-5">
+          <div className="mt-4 border-t border-slate-200/70 dark:border-zinc-800 pt-4 space-y-2">
+            {user.role === 'Owner' && (
               <button
                 type="button"
                 id="backups-hub-btn"
                 title={language === 'en' ? 'Backups & Recovery Hub' : 'بیک اپ اور بحالی مرکز'}
                 onClick={() => setActiveModal('backups')}
                 className={`w-full flex items-center justify-center gap-2 ${
-                  isSidebarCollapsed ? 'p-3' : 'px-3.5 py-2.5'
-                } rounded-xl border border-dashed border-slate-300 hover:border-[#0B192C] text-slate-700 dark:border-zinc-700 dark:hover:border-[#D4AF37] dark:text-zinc-300 bg-white/60 dark:bg-zinc-900/50 transition-all text-xs font-semibold cursor-pointer shadow-2xs`}
+                  isSidebarCollapsed ? 'p-2.5' : 'px-3.5 py-2.5'
+                } rounded-xl border border-dashed border-emerald-500/40 hover:border-[#059669] text-slate-700 dark:border-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900/50 transition-all text-xs font-extrabold cursor-pointer shadow-2xs`}
               >
-                <Database className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                <Database className="h-4 w-4 text-[#059669] shrink-0" />
                 {!isSidebarCollapsed && (
                   <span className="truncate">{language === 'en' ? 'Backups & Recovery' : 'بیک اپ اور بحالی'}</span>
                 )}
               </button>
-            </div>
-          )}
+            )}
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title={t.logout}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-4 py-2.5'
+              } rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-xs lg:text-sm font-extrabold cursor-pointer`}
+            >
+              <LogOut className="h-[18px] w-[18px] shrink-0" />
+              {!isSidebarCollapsed && (
+                <span className="truncate">{t.logout}</span>
+              )}
+            </button>
+          </div>
         </nav>
 
         {/* Dynamic Display Area */}
@@ -1518,185 +2005,57 @@ export default function App() {
             </div>
           )}
 
-          {/* 1. DASHBOARD TAB */}
+          {/* 1. DASHBOARD / BUSINESS MANAGEMENT COMMAND CENTER */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-5 sm:space-y-6">
-              
-              {/* Financial Bento Stats Matrix */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-                
-                {/* Sale box */}
-                <div className="bg-[#0B192C] text-white rounded-2xl p-4 sm:p-5 shadow-xs border border-[#1E293B] flex flex-col justify-between min-h-[116px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] uppercase tracking-wider font-extrabold text-slate-300">{t.sales}</span>
-                    <span className="h-6 w-6 rounded-lg bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                  <div className="mt-2 select-all">
-                    <span className="text-xl sm:text-2xl lg:text-3xl font-black font-mono tabular-nums break-words">
-                      Rs {stats?.totalSales.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-300 flex items-center gap-1">
-                    <span>{language === 'en' ? 'Invoices & Counter Cash' : 'کل آمدنی اور کھاتا کیش ان'}</span>
-                  </div>
-                </div>
-
-                {/* Receivables box */}
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[116px]">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 dark:text-zinc-500">{t.receivables}</span>
-                  <div className="mt-2 select-all text-amber-600 dark:text-amber-400">
-                    <span className="text-xl sm:text-2xl lg:text-3xl font-black font-mono tabular-nums break-words">
-                      Rs {stats?.receivables.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
-                    <Info className="h-3 w-3 shrink-0" />
-                    <span>{language === 'en' ? 'Debt Udhaar from customers' : 'وہ رقم جو گاہکوں سے لینی ہے'}</span>
-                  </div>
-                </div>
-
-                {/* Payables box */}
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[116px]">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 dark:text-zinc-500">{t.payables}</span>
-                  <div className="mt-2 select-all text-red-600 dark:text-red-400">
-                    <span className="text-xl sm:text-2xl lg:text-3xl font-black font-mono tabular-nums break-words">
-                      Rs {stats?.payables.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 shrink-0" />
-                    <span>{language === 'en' ? 'Due to distributor suppliers' : 'سپلائرز کو دینے والے پیسے'}</span>
-                  </div>
-                </div>
-
-                {/* Expenses box */}
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[116px]">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 dark:text-zinc-500">{t.expenses}</span>
-                  <div className="mt-2 select-all text-slate-800 dark:text-zinc-200">
-                    <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums break-words">
-                      Rs {stats?.totalExpenses.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
-                    <ArrowDownLeft className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                    <span>{language === 'en' ? 'Daily shop bills & wages' : 'دکان کے روزمرہ اخراجات'}</span>
-                  </div>
-                </div>
-
-                {/* Profit box - only viewable by Owner/Manager */}
-                {user.role !== 'Employee' ? (
-                  <div className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-900/60 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[116px]">
-                    <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-800 dark:text-emerald-400">{t.profit}</span>
-                    <div className="mt-2 select-all text-emerald-700 dark:text-emerald-300">
-                      <span className="text-xl sm:text-2xl font-black font-mono tabular-nums break-words">
-                        Rs {stats?.profit.toLocaleString() || '0'}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-                      <span>{language === 'en' ? 'Revenue minus cash expense' : 'خالص منافع موازنہ'}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-center items-center text-center opacity-65 min-h-[116px]">
-                    <ShieldAlert className="h-5 w-5 text-slate-400 mb-1" />
-                    <span className="text-[10px] text-slate-400 font-bold">{t.profit} Status Locked</span>
-                  </div>
-                )}
-
-                {/* Cash in Hand */}
-                <div className="bg-slate-900 text-white dark:bg-zinc-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[116px]">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400">{t.cashInHand}</span>
-                  <div className="mt-2 select-all text-[#D4AF37]">
-                    <span className="text-xl sm:text-2xl font-bold font-mono tabular-nums break-words">
-                      Rs {stats?.cashInHand.toLocaleString() || '0'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400">
-                    <span>{language === 'en' ? 'Physical cash in drawer' : 'کیبن دراز میں نقد رقم'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Debt Summary & High-Risk Account Categorization */}
-              <DebtSummary
-                customers={customers}
-                suppliers={suppliers}
-                transactions={transactions}
-                lang={language}
-                getSingleSmsLink={getSingleSmsLink}
-                getWhatsAppLink={getWhatsAppLink}
-                onQuickRecordPayment={(customer) => {
+            <BusinessDashboard
+              user={user}
+              language={language}
+              stats={stats}
+              analytics={analytics}
+              customers={customers}
+              suppliers={suppliers}
+              transactions={transactions}
+              cashbook={cashbook}
+              inventory={inventory}
+              invoices={invoices}
+              isSyncing={isSyncing}
+              lastSync={lastSync}
+              hideBalance={hideBalance}
+              setHideBalance={setHideBalance}
+              onNavigateTab={(targetTab) => {
+                setActiveTab(targetTab);
+                setSearchTerm('');
+                setFilterOption('all');
+                if (targetTab === 'customers') {
+                  setSelectedCustomerId(null);
+                }
+              }}
+              onSelectCustomer={setSelectedCustomerId}
+              onOpenModal={setActiveModal}
+              onOpenCreditSale={() => {
+                setTxType('credit');
+                setTxDesc('');
+                setActiveModal('transaction');
+              }}
+              onOpenRecordPayment={(customer) => {
+                if (customer) {
                   setTxCustId(customer.id);
-                  setTxType('debit');
                   setTxAmount(String(customer.balance));
-                  setTxDesc(language === 'en' ? 'Payment received' : 'بقایا ادائیگی وصول');
-                  setActiveModal('transaction');
-                }}
-                onNavigateToAccount={(targetTab, accountName) => {
-                  setActiveTab(targetTab);
-                  if (targetTab === 'customers') {
-                    if (accountName) {
-                      const matched = customers.find(
-                        (c) => c.name.toLowerCase() === accountName.toLowerCase()
-                      );
-                      setSelectedCustomerId(matched ? matched.id : null);
-                    } else {
-                      setSelectedCustomerId(null);
-                    }
-                  } else {
-                    setSearchTerm(accountName);
-                    setFilterOption('all');
-                  }
-                }}
-              />
-
-              {/* Reports Trend Charts */}
-              {user.role !== 'Employee' && (
-                <DashboardCharts analytics={analytics} lang={language} />
-              )}
-
-              {/* Low Stock Indicators */}
-              <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-850 rounded-2xl p-5 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
-                    <Package id="dash-pack" className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
-                    <span>{t.lowStockAlerts}</span>
-                  </h3>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 font-semibold">
-                    {lowStockItems.length} {language === 'en' ? 'items item level low' : 'اشیاء کم ہیں'}
-                  </span>
-                </div>
-
-                {lowStockItems.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {lowStockItems.map((itm) => (
-                      <div 
-                        key={itm.id}
-                        className="p-3 border border-amber-150 dark:border-amber-950 bg-amber-50/10 dark:bg-amber-950/5 rounded-xl flex items-center justify-between"
-                      >
-                        <div>
-                          <p className="text-xs font-semibold text-gray-800 dark:text-zinc-200">{itm.name}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">SKU: {itm.sku}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-black text-red-600 dark:text-red-400 font-mono">
-                            {itm.quantity} {itm.unit}
-                          </span>
-                          <span className="block text-[8px] text-gray-400">Min: {itm.minQuantity}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-xs text-gray-400">
-                    🌿 {t.noLowStock}
-                  </div>
-                )}
-              </div>
-            </div>
+                } else {
+                  setTxCustId('');
+                  setTxAmount('');
+                }
+                setTxType('debit');
+                setTxDesc(language === 'en' ? 'Payment received' : 'ادائیگی وصول');
+                setActiveModal('transaction');
+              }}
+              onOpenCustomerReport={(customer) => setDashboardReportCustomer(customer)}
+              onRefresh={fetchAllData}
+              onLogout={handleLogout}
+              getSingleSmsLink={getSingleSmsLink}
+              getWhatsAppLink={getWhatsAppLink}
+              t={t}
+            />
           )}
 
           {/* 2. CUSTOMERS TAB (Customer Folder System) */}
@@ -1709,6 +2068,7 @@ export default function App() {
               userRole={user.role}
               selectedCustomerId={selectedCustomerId}
               onSelectCustomer={setSelectedCustomerId}
+              hideBalance={hideBalance}
               onCreateCustomer={async (payload) => {
                 try {
                   const created = await api.createCustomer(payload);
@@ -1756,58 +2116,83 @@ export default function App() {
 
           {/* 3. SUPPLIERS TAB */}
           {activeTab === 'suppliers' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-3 relative pb-24"
+            >
+              {/* Search Bar + Add Supplier Row */}
+              <div className="flex items-center gap-2 sm:gap-3">
                 <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={t.searchPlaceholder}
-                    className="w-full ltr:pl-9 rtl:pr-9 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B192C] dark:focus:ring-[#D4AF37]"
+                    placeholder={
+                      language === 'en'
+                        ? `${suppliers.length} Suppliers`
+                        : `${suppliers.length} سپلائرز تلاش کریں...`
+                    }
+                    className="w-full ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-bold text-slate-800 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#059669] shadow-2xs"
                   />
                 </div>
                 
                 <button
                   id="add-supp-btn"
                   onClick={() => setActiveModal('supplier')}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:hover:bg-[#E5C158] text-white dark:text-[#0B192C] font-bold text-xs cursor-pointer shadow-xs transition-all"
+                  className="hidden sm:flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-meezan-btn text-white font-black text-xs cursor-pointer shadow-sm transition-all shrink-0"
                 >
-                  <Plus className="h-4 w-4 text-[#D4AF37] dark:text-[#0B192C]" />
-                  <span>{t.addSupplier}</span>
+                  <Plus className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
+                  <span className="uppercase tracking-wider">{t.addSupplier}</span>
                 </button>
               </div>
 
-              {/* Suppliers List: Mobile Cards (< md) + Desktop Table (md+) */}
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
-                {/* Mobile Card List */}
-                <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).length > 0 ? (
-                    suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((s) => {
-                      const weOweSupplier = s.balance > 0;
-                      return (
-                        <div key={s.id} className="p-4 flex items-center justify-between gap-3">
+              {/* Suppliers Clean White List */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs divide-y divide-slate-100 dark:divide-zinc-800/80">
+                {suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).length > 0 ? (
+                  suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((s) => {
+                    const weOweSupplier = s.balance > 0;
+                    return (
+                      <div
+                        key={s.id}
+                        className="px-3.5 sm:px-5 py-3.5 flex items-center justify-between gap-3 hover:bg-emerald-50/30 dark:hover:bg-zinc-800/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <PartyAvatar name={s.name} size="md" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{s.name}</p>
-                            <p className="font-mono text-xs text-slate-500 dark:text-zinc-400 mt-0.5 truncate">{s.phone}</p>
-                            <div className={`mt-1.5 font-mono font-black text-xs ${
-                              s.balance === 0
-                                ? 'text-slate-400'
-                                : weOweSupplier
-                                  ? 'text-red-500'
-                                  : 'text-emerald-600'
-                            }`}>
-                              {s.balance === 0
-                                ? 'Rs 0'
-                                : weOweSupplier
-                                  ? `Rs ${s.balance.toLocaleString()} (${language === 'en' ? 'Payable' : 'رقم دینا ہے'})`
-                                  : `Rs ${Math.abs(s.balance).toLocaleString()} (${language === 'en' ? 'Advance' : 'ایڈوانس'})`
-                              }
-                            </div>
+                            <p className="font-extrabold text-[15px] sm:text-base text-slate-900 dark:text-white truncate leading-snug">
+                              {s.name}
+                            </p>
+                            <p className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 mt-0.5 truncate">
+                              {s.phone || (language === 'en' ? 'Supplier Account' : 'سپلائر کھاتہ')}
+                            </p>
                           </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className={`text-sm sm:text-base font-black font-mono tabular-nums leading-tight ${
+                              s.balance === 0
+                                ? 'text-slate-400 dark:text-zinc-500'
+                                : weOweSupplier
+                                  ? 'text-payable-green dark:text-emerald-400'
+                                  : 'text-receivable-maroon dark:text-rose-400'
+                            }`}>
+                              {hideBalance ? 'Rs ••••' : `Rs ${Math.abs(s.balance).toLocaleString()}`}
+                            </p>
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 mt-0.5">
+                              {s.balance === 0
+                                ? (language === 'en' ? 'Settled' : 'حساب برابر')
+                                : weOweSupplier
+                                  ? (language === 'en' ? "You'll Give" : 'دینے ہیں')
+                                  : (language === 'en' ? "You'll Get" : 'لینے ہیں')}
+                            </p>
+                          </div>
+
                           <button
-                            id={`del-supp-mob-${s.id}`}
+                            id={`del-supp-${s.id}`}
                             onClick={() => handleDeleteSupplier(s.id)}
                             className="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 shrink-0 cursor-pointer"
                             title={t.delete}
@@ -1815,239 +2200,463 @@ export default function App() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-10 px-4 text-xs text-slate-400">
-                      🔍 No distributor suppliers found in directory.
-                    </div>
-                  )}
-                </div>
-
-                {/* Desktop/Tablet Table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                        <th className="py-3 px-4">{t.supplierName}</th>
-                        <th className="py-3 px-4">{t.phone}</th>
-                        <th className="py-3 px-4 text-right">{t.balance}</th>
-                        <th className="py-3 px-4 text-center">{t.actions}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).length > 0 ? (
-                        suppliers.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((s) => {
-                          const weOweSupplier = s.balance > 0;
-                          return (
-                            <tr key={s.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-800/30">
-                              <td className="py-4 px-4 font-semibold text-slate-800 dark:text-zinc-200">
-                                {s.name}
-                              </td>
-                              <td className="py-4 px-4 font-mono text-xs text-slate-500">
-                                {s.phone}
-                              </td>
-                              <td className={`py-4 px-4 font-mono font-black text-right ${
-                                s.balance === 0 
-                                  ? 'text-slate-400' 
-                                  : weOweSupplier 
-                                    ? 'text-red-500' 
-                                    : 'text-emerald-600'
-                              }`}>
-                                {s.balance === 0 
-                                  ? 'Rs 0' 
-                                  : weOweSupplier 
-                                    ? `Rs ${s.balance.toLocaleString()} (${language === 'en' ? 'Payable' : 'رقم دینا ہے'})` 
-                                    : `Rs ${Math.abs(s.balance).toLocaleString()} (${language === 'en' ? 'Advance' : 'ایڈوانس'})`
-                                }
-                              </td>
-                              <td className="py-4 px-4 text-center">
-                                <button
-                                  id={`del-supp-${s.id}`}
-                                  onClick={() => handleDeleteSupplier(s.id)}
-                                  className="p-1.5 px-3 rounded-lg hover:bg-red-50 hover:text-red-600 text-slate-400 cursor-pointer"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="text-center py-12 text-sm text-slate-400">
-                            🔍 No distributor suppliers found in directory.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 px-4 text-xs text-slate-400 font-bold">
+                    🔍 {language === 'en' ? 'No suppliers found in directory.' : 'کوئی سپلائر نہیں ملا۔'}
+                  </div>
+                )}
               </div>
-            </div>
+
+              {/* Floating CTA Button (+ ADD SUPPLIER) */}
+              <div className="fixed bottom-20 md:bottom-8 right-4 sm:right-8 z-30">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('supplier')}
+                  className="flex items-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl bg-meezan-btn text-white font-black text-xs sm:text-sm tracking-wider uppercase cursor-pointer shadow-lg hover:scale-[1.02] active:scale-95 transition-transform"
+                >
+                  <Plus className="h-4 w-4 sm:h-5 sm:w-5 stroke-[3] text-[#D4AF37]" />
+                  <span>
+                    {language === 'en' ? 'ADD SUPPLIER' : 'نیا سپلائر شامل کریں'}
+                  </span>
+                </button>
+              </div>
+            </motion.div>
           )}
 
-          {/* 4. CASH BOOK TAB */}
+          {/* 4. PAYMENTS / TRANSACTIONS & CASH BOOK TAB */}
           {activeTab === 'cashbook' && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by category / item..."
-                    className="w-full ltr:pl-9 rtl:pr-9 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B192C] dark:focus:ring-[#D4AF37]"
-                  />
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
+              {/* Sub-tab Switcher: Customer Transactions vs Counter Cashbook */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                    {language === 'en' ? 'Payments & Transactions Ledger' : 'ادائیگیاں اور لین دین کا کھاتہ'}
+                  </h3>
+                  <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {language === 'en'
+                      ? 'Switch between Customer Ledger Transactions and Counter Cashbook entries.'
+                      : 'گاہک کے لین دین اور کیش بک اندراجات کے درمیان تبدیل کریں۔'}
+                  </p>
                 </div>
-                
-                <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2">
-                  <select
-                    value={filterOption}
-                    onChange={(e) => setFilterOption(e.target.value)}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-semibold text-slate-700 dark:text-zinc-300 focus:outline-none"
-                  >
-                    <option value="all">{language === 'en' ? 'Cash-In/Out (All)' : 'کل کیش رسیدیں'}</option>
-                    <option value="cash-in">{language === 'en' ? 'Cash IN (آمدنی)' : 'کیش ان (رقم آئی)'}</option>
-                    <option value="cash-out">{language === 'en' ? 'Cash OUT (اخراجات)' : 'کیش آؤٹ (رقم گئی)'}</option>
-                  </select>
-
+                <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200/70 dark:border-zinc-700 self-start sm:self-auto">
                   <button
-                    id="add-cash-btn"
-                    onClick={() => setActiveModal('cashbook')}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:hover:bg-[#E5C158] text-white dark:text-[#0B192C] font-bold text-xs cursor-pointer shadow-xs transition-all"
+                    type="button"
+                    onClick={() => {
+                      setPaymentSubTab('transactions');
+                      setFilterOption('all');
+                    }}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      paymentSubTab === 'transactions'
+                        ? 'bg-[#064E3B] text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
                   >
-                    <Plus className="h-4 w-4 text-[#D4AF37] dark:text-[#0B192C]" />
-                    <span>{t.addCashEntry}</span>
+                    {language === 'en' ? `Customer Ledger (${transactions.length})` : `گاہک کھاتہ (${transactions.length})`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentSubTab('cashbook');
+                      setFilterOption('all');
+                    }}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      paymentSubTab === 'cashbook'
+                        ? 'bg-[#064E3B] text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {language === 'en' ? `Counter Cashbook (${cashbook.length})` : `کیش بک (${cashbook.length})`}
                   </button>
                 </div>
               </div>
 
-              {/* Cash entries history: Mobile Cards (< md) + Desktop Table (md+) */}
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
-                {/* Mobile Card List */}
-                <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {getFilteredCashbook().length > 0 ? (
-                    getFilteredCashbook().map((cb) => (
-                      <div key={cb.id} className="p-4 flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                              cb.type === 'cash-in'
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                            }`}>
-                              {cb.type === 'cash-in' ? t.cashIn : t.cashOut}
-                            </span>
-                            <span className="font-mono text-[11px] text-slate-400">{cb.date}</span>
-                          </div>
-                          <p className="font-bold text-sm text-slate-900 dark:text-white break-words">{cb.category}</p>
-                          {cb.description && (
-                            <p className="text-xs text-slate-500 dark:text-zinc-400 break-words">{cb.description}</p>
-                          )}
-                          <p className="text-[10px] font-mono text-slate-400">by {cb.createdBy}</p>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-2 shrink-0">
-                          <span className={`font-mono font-black text-sm ${
-                            cb.type === 'cash-in'
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-red-500'
-                          }`}>
-                            {cb.type === 'cash-in' ? `+ Rs ${cb.amount.toLocaleString()}` : `- Rs ${cb.amount.toLocaleString()}`}
-                          </span>
-                          <button
-                            id={`del-cb-mob-${cb.id}`}
-                            onClick={() => handleDeleteCashEntry(cb.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 cursor-pointer"
-                            title={t.delete}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-10 px-4 text-xs text-slate-400">
-                      🔍 No cashbook entries listed. Click "{t.addCashEntry}" to register counter cash.
+              {paymentSubTab === 'transactions' ? (
+                <>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
+                    <div className="relative flex-1 min-w-0">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder={
+                          language === 'en'
+                            ? 'Search by customer name, ID, or description...'
+                            : 'گاہک کا نام یا تفصیل تلاش کریں...'
+                        }
+                        className="w-full ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#059669]"
+                      />
                     </div>
-                  )}
-                </div>
 
-                {/* Desktop/Tablet Table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                        <th className="py-3 px-4">{t.date}</th>
-                        <th className="py-3 px-4">{t.category}</th>
-                        <th className="py-3 px-4">{t.description}</th>
-                        <th className="py-3 px-4 text-right">{t.amount}</th>
-                        <th className="py-3 px-4 text-center">{t.actions}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                    <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2">
+                      <select
+                        value={filterOption}
+                        onChange={(e) => setFilterOption(e.target.value)}
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-extrabold text-slate-700 dark:text-zinc-300 focus:outline-none"
+                      >
+                        <option value="all">{language === 'en' ? 'All Transactions' : 'تمام لین دین'}</option>
+                        <option value="debit">{language === 'en' ? 'Payment Received (وصولی)' : 'وصولی (رقم ملی)'}</option>
+                        <option value="credit">{language === 'en' ? 'Credit Given (ادھار دیا)' : 'ادھار دیا'}</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTxType('debit');
+                          setActiveModal('transaction');
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-meezan-btn text-white font-black text-xs cursor-pointer shadow-sm transition-all"
+                      >
+                        <Plus className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
+                        <span className="uppercase tracking-wider">
+                          {language === 'en' ? 'Record Payment' : 'نیا لین دین'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
+                    {/* Mobile Card List */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
+                      {getFilteredTransactions().length > 0 ? (
+                        getFilteredTransactions().map((tx) => {
+                          const cust = customers.find((c) => c.id === tx.customerId);
+                          const isPaymentReceived = tx.type === 'debit';
+                          return (
+                            <div key={tx.id} className="p-4 flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-bold text-[11px] text-slate-600 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
+                                    #{tx.id.slice(0, 8).toUpperCase()}
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                      isPaymentReceived
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                                    }`}
+                                  >
+                                    {isPaymentReceived
+                                      ? language === 'en'
+                                        ? 'Paid / Received'
+                                        : 'وصول شدہ'
+                                      : language === 'en'
+                                        ? 'Pending Credit'
+                                        : 'ادھار / باقی'}
+                                  </span>
+                                  <span className="font-mono text-[11px] text-slate-400">{tx.date}</span>
+                                </div>
+                                <p className="font-extrabold text-sm text-slate-900 dark:text-white break-words">
+                                  {cust?.name || (language === 'en' ? 'Customer Account' : 'گاہک کھاتہ')}
+                                </p>
+                                {tx.description && (
+                                  <div className="text-xs text-slate-500 dark:text-zinc-400 break-words">
+                                    <TransactionDescriptionView description={tx.description} language={language} />
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex flex-col items-end gap-2 shrink-0">
+                                <span
+                                  className={`font-black font-mono text-sm tabular-nums ${
+                                    isPaymentReceived
+                                      ? 'text-payable-green dark:text-emerald-400'
+                                      : 'text-receivable-maroon dark:text-rose-400'
+                                  }`}
+                                >
+                                  {isPaymentReceived
+                                    ? `+ Rs ${tx.amount.toLocaleString()}`
+                                    : `- Rs ${tx.amount.toLocaleString()}`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTransaction(tx.id)}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 cursor-pointer"
+                                  title={t.delete}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-10 px-4 text-xs text-slate-400 font-bold">
+                          🔍 {language === 'en' ? 'No customer transactions recorded yet.' : 'کوئی لین دین موجود نہیں ہے۔'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-3 px-4">{language === 'en' ? 'Transaction ID' : 'ٹرانزیکشن آئی ڈی'}</th>
+                            <th className="py-3 px-4">{t.customerName}</th>
+                            <th className="py-3 px-4">{t.date}</th>
+                            <th className="py-3 px-4">{t.description}</th>
+                            <th className="py-3 px-4 text-right">{t.amount}</th>
+                            <th className="py-3 px-4 text-center">{language === 'en' ? 'Payment Status' : 'اسٹیٹس'}</th>
+                            <th className="py-3 px-4 text-center">{t.actions}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getFilteredTransactions().length > 0 ? (
+                            getFilteredTransactions().map((tx) => {
+                              const cust = customers.find((c) => c.id === tx.customerId);
+                              const isPaymentReceived = tx.type === 'debit';
+                              return (
+                                <tr
+                                  key={tx.id}
+                                  className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-emerald-50/20 dark:hover:bg-zinc-800/30"
+                                >
+                                  <td className="py-4 px-4 font-mono text-xs font-bold text-slate-600 dark:text-zinc-300">
+                                    #{tx.id.slice(0, 8).toUpperCase()}
+                                  </td>
+                                  <td className="py-4 px-4 font-extrabold text-slate-900 dark:text-white">
+                                    {cust?.name || (language === 'en' ? 'Customer Account' : 'گاہک کھاتہ')}
+                                    <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-400 mt-0.5">
+                                      by {tx.createdBy}
+                                    </span>
+                                  </td>
+                                  <td className="py-4 px-4 font-mono text-xs text-slate-400">{tx.date}</td>
+                                  <td className="py-4 px-4 text-slate-500 text-xs max-w-xs">
+                                    <TransactionDescriptionView
+                                      description={tx.description}
+                                      language={language}
+                                      emptyLabel="-"
+                                    />
+                                  </td>
+                                  <td
+                                    className={`py-4 px-4 font-black font-mono text-right tabular-nums ${
+                                      isPaymentReceived
+                                        ? 'text-payable-green dark:text-emerald-400'
+                                        : 'text-receivable-maroon dark:text-rose-400'
+                                    }`}
+                                  >
+                                    {isPaymentReceived
+                                      ? `+ Rs ${tx.amount.toLocaleString()}`
+                                      : `- Rs ${tx.amount.toLocaleString()}`}
+                                  </td>
+                                  <td className="py-4 px-4 text-center">
+                                    <span
+                                      className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-extrabold ${
+                                        isPaymentReceived
+                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                          : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                      }`}
+                                    >
+                                      {isPaymentReceived
+                                        ? language === 'en'
+                                          ? 'Paid / Received'
+                                          : 'وصول شدہ'
+                                        : language === 'en'
+                                          ? 'Pending Credit'
+                                          : 'ادھار / باقی'}
+                                    </span>
+                                  </td>
+                                  <td className="py-4 px-4 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTransaction(tx.id)}
+                                      className="p-1.5 px-3 rounded-lg hover:bg-red-50 hover:text-red-600 text-slate-400 cursor-pointer"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="text-center py-12 text-sm text-slate-400 font-bold">
+                                🔍 {language === 'en' ? 'No customer transactions recorded yet.' : 'کوئی لین دین موجود نہیں ہے۔'}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
+                    <div className="relative flex-1 min-w-0">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search by category / item..."
+                        className="w-full ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#059669]"
+                      />
+                    </div>
+                    
+                    <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2">
+                      <select
+                        value={filterOption}
+                        onChange={(e) => setFilterOption(e.target.value)}
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-extrabold text-slate-700 dark:text-zinc-300 focus:outline-none"
+                      >
+                        <option value="all">{language === 'en' ? 'Cash-In/Out (All)' : 'کل کیش رسیدیں'}</option>
+                        <option value="cash-in">{language === 'en' ? 'Cash IN (آمدنی)' : 'کیش ان (رقم آئی)'}</option>
+                        <option value="cash-out">{language === 'en' ? 'Cash OUT (اخراجات)' : 'کیش آؤٹ (رقم گئی)'}</option>
+                      </select>
+
+                      <button
+                        id="add-cash-btn"
+                        onClick={() => setActiveModal('cashbook')}
+                        className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-meezan-btn text-white font-black text-xs cursor-pointer shadow-sm transition-all"
+                      >
+                        <Plus className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
+                        <span className="uppercase tracking-wider">{t.addCashEntry}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cash entries history: Mobile Cards (< md) + Desktop Table (md+) */}
+                  <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
+                    {/* Mobile Card List */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
                       {getFilteredCashbook().length > 0 ? (
                         getFilteredCashbook().map((cb) => (
-                          <tr key={cb.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-800/30">
-                            <td className="py-4 px-4 font-mono text-xs text-slate-400">
-                              {cb.date}
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className="font-semibold text-slate-800 dark:text-zinc-200">{cb.category}</span>
-                              <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-400 mt-0.5">by {cb.createdBy}</span>
-                            </td>
-                            <td className="py-4 px-4 text-slate-500 italic text-xs max-w-xs truncate">
-                              {cb.description || '-'}
-                            </td>
-                            <td className={`py-4 px-4 font-mono font-black text-right ${
-                              cb.type === 'cash-in' 
-                                ? 'text-emerald-600 dark:text-emerald-400' 
-                                : 'text-red-500'
-                            }`}>
-                              {cb.type === 'cash-in' ? `+ Rs ${cb.amount.toLocaleString()}` : `- Rs ${cb.amount.toLocaleString()}`}
-                              <span className="block text-[8px] font-sans font-bold uppercase mt-0.5">
-                                {cb.type === 'cash-in' ? t.cashIn : t.cashOut}
+                          <div key={cb.id} className="p-4 flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                  cb.type === 'cash-in'
+                                    ? 'bg-emerald-50 text-payable-green dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'bg-red-50 text-receivable-maroon dark:bg-red-950/40 dark:text-red-300'
+                                }`}>
+                                  {cb.type === 'cash-in' ? t.cashIn : t.cashOut}
+                                </span>
+                                <span className="font-mono text-[11px] text-slate-400">{cb.date}</span>
+                              </div>
+                              <p className="font-extrabold text-sm text-slate-900 dark:text-white break-words">{cb.category}</p>
+                              {cb.description && (
+                                <div className="text-xs text-slate-500 dark:text-zinc-400 break-words">
+                                  <TransactionDescriptionView description={cb.description} language={language} />
+                                </div>
+                              )}
+                              <p className="text-[10px] font-mono text-slate-400">by {cb.createdBy}</p>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2 shrink-0">
+                              <span className={`font-black font-mono text-sm tabular-nums ${
+                                cb.type === 'cash-in'
+                                  ? 'text-payable-green dark:text-emerald-400'
+                                  : 'text-receivable-maroon dark:text-rose-400'
+                              }`}>
+                                {cb.type === 'cash-in' ? `+ Rs ${cb.amount.toLocaleString()}` : `- Rs ${cb.amount.toLocaleString()}`}
                               </span>
-                            </td>
-                            <td className="py-4 px-4 text-center">
                               <button
-                                id={`del-cb-${cb.id}`}
+                                id={`del-cb-mob-${cb.id}`}
                                 onClick={() => handleDeleteCashEntry(cb.id)}
-                                className="p-1.5 px-3 rounded-lg hover:bg-red-50 hover:text-red-600 text-slate-400 cursor-pointer"
+                                className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 cursor-pointer"
+                                title={t.delete}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            </td>
-                          </tr>
+                            </div>
+                          </div>
                         ))
                       ) : (
-                        <tr>
-                          <td colSpan={5} className="text-center py-12 text-sm text-slate-400">
-                            🔍 No cashbook entries listed. Click "{t.addCashEntry}" to register counter cash.
-                          </td>
-                        </tr>
+                        <div className="text-center py-10 px-4 text-xs text-slate-400 font-bold">
+                          🔍 No cashbook entries listed. Click "{t.addCashEntry}" to register counter cash.
+                        </div>
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+                    </div>
+
+                    {/* Desktop/Tablet Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-3 px-4">{t.date}</th>
+                            <th className="py-3 px-4">{t.category}</th>
+                            <th className="py-3 px-4">{t.description}</th>
+                            <th className="py-3 px-4 text-right">{t.amount}</th>
+                            <th className="py-3 px-4 text-center">{t.actions}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getFilteredCashbook().length > 0 ? (
+                            getFilteredCashbook().map((cb) => (
+                              <tr key={cb.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-emerald-50/20 dark:hover:bg-zinc-800/30">
+                                <td className="py-4 px-4 font-mono text-xs text-slate-400">
+                                  {cb.date}
+                                </td>
+                                <td className="py-4 px-4">
+                                  <span className="font-extrabold text-slate-800 dark:text-zinc-200">{cb.category}</span>
+                                  <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-400 mt-0.5">by {cb.createdBy}</span>
+                                </td>
+                                <td className="py-4 px-4 text-slate-500 text-xs max-w-xs">
+                                  <TransactionDescriptionView description={cb.description} language={language} emptyLabel="-" />
+                                </td>
+                                <td className={`py-4 px-4 font-black font-mono text-right tabular-nums ${
+                                  cb.type === 'cash-in' 
+                                    ? 'text-payable-green dark:text-emerald-400' 
+                                    : 'text-receivable-maroon dark:text-rose-400'
+                                }`}>
+                                  {cb.type === 'cash-in' ? `+ Rs ${cb.amount.toLocaleString()}` : `- Rs ${cb.amount.toLocaleString()}`}
+                                  <span className="block text-[8px] font-sans font-bold uppercase mt-0.5">
+                                    {cb.type === 'cash-in' ? t.cashIn : t.cashOut}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-center">
+                                  <button
+                                    id={`del-cb-${cb.id}`}
+                                    onClick={() => handleDeleteCashEntry(cb.id)}
+                                    className="p-1.5 px-3 rounded-lg hover:bg-red-50 hover:text-red-600 text-slate-400 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="text-center py-12 text-sm text-slate-400 font-bold">
+                                🔍 No cashbook entries listed. Click "{t.addCashEntry}" to register counter cash.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </motion.div>
           )}
 
           {/* 5. INVENTORY TAB */}
           {activeTab === 'inventory' && (
-            <div className="space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
               <div className="flex flex-col sm:flex-row gap-3 justify-between sm:items-center">
                 <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search stock by SKU, category or product name..."
-                    className="w-full ltr:pl-9 rtl:pr-9 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B192C] dark:focus:ring-[#D4AF37]"
+                    className="w-full ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#059669]"
                   />
                 </div>
                 
@@ -2055,7 +2664,7 @@ export default function App() {
                   <select
                     value={filterOption}
                     onChange={(e) => setFilterOption(e.target.value)}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-semibold text-slate-700 dark:text-zinc-300 focus:outline-none"
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-extrabold text-slate-700 dark:text-zinc-300 focus:outline-none"
                   >
                     <option value="all"> {language === 'en' ? 'All Stock (سب)' : 'سب اسٹاک اشیاء'} </option>
                     <option value="low-stock"> ⚠️ {language === 'en' ? 'Low Stock Warnings' : 'کم اسٹاک کی نشان دہی'} </option>
@@ -2064,10 +2673,10 @@ export default function App() {
                   <button
                     id="add-stock-btn"
                     onClick={() => setActiveModal('inventory')}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:hover:bg-[#E5C158] text-white dark:text-[#0B192C] font-bold text-xs cursor-pointer shadow-xs transition-all"
+                    className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-meezan-btn text-white font-black text-xs cursor-pointer shadow-sm transition-all"
                   >
-                    <Plus className="h-4 w-4 text-[#D4AF37] dark:text-[#0B192C]" />
-                    <span>{t.addStockItem}</span>
+                    <Plus className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
+                    <span className="uppercase tracking-wider">{t.addStockItem}</span>
                   </button>
                 </div>
               </div>
@@ -2083,7 +2692,7 @@ export default function App() {
                         <div key={itm.id} className="p-4 space-y-2.5">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="font-bold text-sm text-slate-900 dark:text-white break-words">{itm.name}</p>
+                              <p className="font-extrabold text-sm text-slate-900 dark:text-white break-words">{itm.name}</p>
                               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                                 SKU: {itm.sku} • {itm.category}
                               </p>
@@ -2099,15 +2708,15 @@ export default function App() {
 
                           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60 text-xs">
                             <div>
-                              <span className="block text-[10px] text-slate-400 uppercase">{t.purchasePrice}</span>
-                              <span className="font-mono font-semibold text-slate-600 dark:text-zinc-300">Rs {itm.purchasePrice.toLocaleString()}</span>
+                              <span className="block text-[10px] text-slate-400 uppercase font-bold">{t.purchasePrice}</span>
+                              <span className="font-mono font-bold text-slate-600 dark:text-zinc-300">Rs {itm.purchasePrice.toLocaleString()}</span>
                             </div>
                             <div>
-                              <span className="block text-[10px] text-slate-400 uppercase">{t.sellPrice}</span>
-                              <span className="font-mono font-bold text-[#0B192C] dark:text-[#D4AF37]">Rs {itm.sellPrice.toLocaleString()}</span>
+                              <span className="block text-[10px] text-slate-400 uppercase font-bold">{t.sellPrice}</span>
+                              <span className="font-mono font-black text-[#059669]">Rs {itm.sellPrice.toLocaleString()}</span>
                             </div>
                             <div className="text-right">
-                              <span className="block text-[10px] text-slate-400 uppercase">{t.quantity}</span>
+                              <span className="block text-[10px] text-slate-400 uppercase font-bold">{t.quantity}</span>
                               <span className={`inline-block font-mono font-black text-xs px-2 py-0.5 rounded-full ${
                                 isAlert
                                   ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400'
@@ -2121,7 +2730,7 @@ export default function App() {
                       );
                     })
                   ) : (
-                    <div className="text-center py-10 px-4 text-xs text-slate-400">
+                    <div className="text-center py-10 px-4 text-xs text-slate-400 font-bold">
                       🔍 No inventory stock lines match filter options.
                     </div>
                   )}
@@ -2131,7 +2740,7 @@ export default function App() {
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-black tracking-wider">
                         <th className="py-3 px-4">{language === 'en' ? 'Product Detail' : 'سامان کی معلومات'}</th>
                         <th className="py-3 px-4">{t.category}</th>
                         <th className="py-3 px-4 text-right">{t.purchasePrice}</th>
@@ -2145,14 +2754,14 @@ export default function App() {
                         getFilteredInventory().map((itm) => {
                           const isAlert = itm.quantity <= itm.minQuantity;
                           return (
-                            <tr key={itm.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-800/30">
-                              <td className="py-4 px-4 font-semibold text-slate-800 dark:text-zinc-200">
+                            <tr key={itm.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-emerald-50/20 dark:hover:bg-zinc-800/30">
+                              <td className="py-4 px-4 font-extrabold text-slate-800 dark:text-zinc-200">
                                 <div>{itm.name}</div>
                                 <div className="text-[10px] text-slate-400 mt-0.5 font-mono">SKU: {itm.sku}</div>
                               </td>
-                              <td className="py-4 px-4 text-xs font-semibold text-slate-500">{itm.category}</td>
+                              <td className="py-4 px-4 text-xs font-bold text-slate-500">{itm.category}</td>
                               <td className="py-4 px-4 font-mono text-right text-slate-500">Rs {itm.purchasePrice.toLocaleString()}</td>
-                              <td className="py-4 px-4 font-mono text-right font-semibold text-[#0B192C] dark:text-[#D4AF37]">Rs {itm.sellPrice.toLocaleString()}</td>
+                              <td className="py-4 px-4 font-mono text-right font-black text-[#059669]">Rs {itm.sellPrice.toLocaleString()}</td>
                               <td className="py-4 px-4 text-right">
                                 <span className={`inline-block font-mono font-black text-sm px-2.5 py-1 rounded-full ${
                                   isAlert 
@@ -2179,7 +2788,7 @@ export default function App() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={6} className="text-center py-12 text-sm text-slate-400">
+                          <td colSpan={6} className="text-center py-12 text-sm text-slate-400 font-bold">
                             🔍 No inventory stock lines match filter options.
                           </td>
                         </tr>
@@ -2188,24 +2797,29 @@ export default function App() {
                   </table>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
-          {/* 6. INVOICES BUILDER TAB */}
+          {/* 6. INVOICES / SALES BUILDER TAB */}
           {activeTab === 'invoices' && (
-            <div className="space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200">{t.invoices}</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{language === 'en' ? 'Click create invoice to generate printable client receipts & download bills.' : 'گاہکوں کا بل بنانے اور پرنٹ کرنے کے لیے بٹن دبائیں۔'}</p>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-zinc-200">{t.invoices}</h3>
+                  <p className="text-[11px] text-slate-400 font-bold mt-0.5">{language === 'en' ? 'Click create invoice to generate printable client receipts & download bills.' : 'گاہکوں کا بل بنانے اور پرنٹ کرنے کے لیے بٹن دبائیں۔'}</p>
                 </div>
                 <button
                   id="open-invoice-builder-btn"
                   onClick={() => setActiveModal('invoice')}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:hover:bg-[#E5C158] text-white dark:text-[#0B192C] font-bold text-xs cursor-pointer shadow-xs transition-all shrink-0"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-meezan-btn text-white font-black text-xs cursor-pointer shadow-sm transition-all shrink-0"
                 >
-                  <Plus className="h-4 w-4 text-[#D4AF37] dark:text-[#0B192C]" />
-                  <span>{t.createInvoice}</span>
+                  <Plus className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
+                  <span className="uppercase tracking-wider">{t.createInvoice}</span>
                 </button>
               </div>
 
@@ -2218,28 +2832,28 @@ export default function App() {
                       <div key={inv.id} className="p-4 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-xs text-[#0B192C] dark:text-[#D4AF37] bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
+                            <span className="font-mono font-bold text-xs text-[#064E3B] dark:text-emerald-300 bg-emerald-50 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
                               {inv.invoiceNumber}
                             </span>
                             <span className="font-mono text-[11px] text-slate-400">{inv.date}</span>
                           </div>
-                          <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{inv.customerName}</p>
-                          <p className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-400">
+                          <p className="font-extrabold text-sm text-slate-900 dark:text-white truncate">{inv.customerName}</p>
+                          <p className="font-black font-mono text-sm text-payable-green dark:text-emerald-400 tabular-nums">
                             Rs {inv.total.toLocaleString()}
                           </p>
                         </div>
                         <button
                           id={`view-inv-printer-mob-${inv.id}`}
                           onClick={() => setSelectedInvoice(inv)}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-[#0B192C] text-white dark:bg-[#D4AF37] dark:text-[#0B192C] cursor-pointer shrink-0 shadow-2xs"
+                          className="inline-flex items-center gap-1.5 text-xs font-black px-3.5 py-2 rounded-xl bg-meezan-btn text-white cursor-pointer shrink-0 shadow-2xs"
                         >
-                          <Download className="h-3.5 w-3.5 text-[#D4AF37] dark:text-[#0B192C]" />
+                          <Download className="h-3.5 w-3.5 text-[#D4AF37]" />
                           <span>{t.downloadPdf}</span>
                         </button>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-10 px-4 text-xs text-slate-400">
+                    <div className="text-center py-10 px-4 text-xs text-slate-400 font-bold">
                       🧾 {t.noInvoices}
                     </div>
                   )}
@@ -2249,7 +2863,7 @@ export default function App() {
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900 text-slate-400 text-[10px] uppercase font-black tracking-wider">
                         <th className="py-3 px-4">{t.invoiceNum}</th>
                         <th className="py-3 px-4">{t.customerName}</th>
                         <th className="py-3 px-4">{t.date}</th>
@@ -2260,23 +2874,23 @@ export default function App() {
                     <tbody>
                       {invoices.length > 0 ? (
                         invoices.map((inv) => (
-                          <tr key={inv.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-800/30">
+                          <tr key={inv.id} className="border-b border-slate-100 dark:border-zinc-800/80 text-sm hover:bg-emerald-50/20 dark:hover:bg-zinc-800/30">
                             <td className="py-4 px-4 font-mono font-bold text-slate-800 dark:text-zinc-200">
                               {inv.invoiceNumber}
                             </td>
-                            <td className="py-4 px-4 font-semibold text-slate-800 dark:text-zinc-300">
+                            <td className="py-4 px-4 font-extrabold text-slate-800 dark:text-zinc-300">
                               {inv.customerName}
                               <span className="block text-[8px] font-sans font-medium text-slate-400 mt-0.5">Checked-out by {inv.createdBy}</span>
                             </td>
                             <td className="py-4 px-4 font-mono text-xs text-slate-400">{inv.date}</td>
-                            <td className="py-4 px-4 font-mono font-black text-right text-[#0B192C] dark:text-[#D4AF37]">Rs {inv.total.toLocaleString()}</td>
+                            <td className="py-4 px-4 font-black font-mono text-right text-payable-green dark:text-emerald-400 tabular-nums">Rs {inv.total.toLocaleString()}</td>
                             <td className="py-4 px-4 text-center">
                               <button
                                 id={`view-inv-printer-${inv.id}`}
                                 onClick={() => setSelectedInvoice(inv)}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#0B192C] text-white dark:bg-[#D4AF37] dark:text-[#0B192C] cursor-pointer shadow-2xs"
+                                className="inline-flex items-center gap-1.5 text-[11px] font-black px-3.5 py-1.5 rounded-xl bg-meezan-btn text-white cursor-pointer shadow-2xs"
                               >
-                                <Download id={`inv-printer-${inv.id}`} className="h-3 w-3 text-[#D4AF37] dark:text-[#0B192C]" />
+                                <Download id={`inv-printer-${inv.id}`} className="h-3 w-3 text-[#D4AF37]" />
                                 <span>{t.downloadPdf}</span>
                               </button>
                             </td>
@@ -2284,7 +2898,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="text-center py-12 text-sm text-slate-400">
+                          <td colSpan={5} className="text-center py-12 text-sm text-slate-400 font-bold">
                             🧾 {t.noInvoices}
                           </td>
                         </tr>
@@ -2293,7 +2907,317 @@ export default function App() {
                   </table>
                 </div>
               </div>
-            </div>
+            </motion.div>
+          )}
+
+          {/* 7. REPORTS & ANALYTICS TAB */}
+          {activeTab === 'reports' && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-5"
+            >
+              {/* Reports Header & Customer PDF Statement Generator */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 mb-1.5">
+                    <BarChart3 className="h-3.5 w-3.5 text-[#059669]" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#064E3B] dark:text-emerald-300">
+                      {language === 'en' ? 'Financial Intelligence & Statements' : 'مالیاتی رپورٹس اور تجزیہ'}
+                    </span>
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    {language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیہ'}
+                  </h2>
+                  <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {language === 'en'
+                      ? 'Analyze sales vs expenses, monitor debt aging, and export full PDF customer statements.'
+                      : 'آمدنی، اخراجات اور بقایاجات کا مکمل تجزیہ کریں اور پی ڈی ایف اسٹیٹمنٹ ڈاؤن لوڈ کریں۔'}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {customers.length > 0 && (
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        const found = customers.find((c) => c.id === e.target.value);
+                        if (found) {
+                          setDashboardReportCustomer(found);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-extrabold text-slate-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#059669] cursor-pointer"
+                    >
+                      <option value="" disabled>
+                        {language === 'en' ? '📄 Generate Customer PDF Statement...' : '📄 گاہک کی پی ڈی ایف رپورٹ بنائیں...'}
+                      </option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} (Rs {Math.abs(c.balance).toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleManualExport}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black tracking-wider uppercase shadow-sm cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5 text-[#D4AF37]" />
+                    <span>{language === 'en' ? 'Export Full Ledger' : 'ڈیٹا ایکسپورٹ کریں'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Executive Summary KPI Row */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {language === 'en' ? 'Total Receivables' : 'کل لینے ہیں'}
+                  </p>
+                  <p className="text-lg sm:text-xl font-black font-mono text-receivable-maroon dark:text-rose-400 mt-1 tabular-nums">
+                    {hideBalance ? 'Rs ••••' : `Rs ${stats.receivables.toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {language === 'en' ? 'Total Payables' : 'کل دینے ہیں'}
+                  </p>
+                  <p className="text-lg sm:text-xl font-black font-mono text-payable-green dark:text-emerald-400 mt-1 tabular-nums">
+                    {hideBalance ? 'Rs ••••' : `Rs ${stats.payables.toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {language === 'en' ? 'Cash in Hand' : 'کیش ان ہینڈ'}
+                  </p>
+                  <p className="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-1 tabular-nums">
+                    {hideBalance ? 'Rs ••••' : `Rs ${stats.cashInHand.toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {language === 'en' ? 'Net Profit' : 'خالص منافع'}
+                  </p>
+                  <p className="text-lg sm:text-xl font-black font-mono text-[#059669] dark:text-emerald-400 mt-1 tabular-nums">
+                    {hideBalance ? 'Rs ••••' : `Rs ${stats.netProfit.toLocaleString()}`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Visual Charts */}
+              {['Owner', 'Manager'].includes(user.role) && (
+                <DashboardCharts analytics={analytics} lang={language} />
+              )}
+
+              {/* Debt Aging & Collection Summary */}
+              <div id="debt-summary-section">
+                <DebtSummary
+                  customers={customers}
+                  suppliers={suppliers}
+                  transactions={transactions}
+                  lang={language}
+                  getSingleSmsLink={getSingleSmsLink}
+                  getWhatsAppLink={getWhatsAppLink}
+                  onQuickRecordPayment={(customer) => {
+                    if (customer) {
+                      setTxCustId(customer.id);
+                      setTxAmount(String(customer.balance));
+                    }
+                    setTxType('debit');
+                    setTxDesc(language === 'en' ? 'Payment received' : 'ادائیگی وصول');
+                    setActiveModal('transaction');
+                  }}
+                  onNavigateToAccount={(targetTab, accountName) => {
+                    setActiveTab(targetTab);
+                    if (targetTab === 'customers' && accountName) {
+                      const matched = customers.find(
+                        (c) => c.name.toLowerCase() === accountName.toLowerCase()
+                      );
+                      setSelectedCustomerId(matched ? matched.id : null);
+                    }
+                  }}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {/* 8. SETTINGS TAB */}
+          {activeTab === 'settings' && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="max-w-4xl space-y-5"
+            >
+              {/* Business & Profile Settings Card */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xs">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#064E3B] to-[#059669] text-[#D4AF37] font-black text-base flex items-center justify-center shadow-xs">
+                    {user.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                      {language === 'en' ? 'Business & Profile Settings' : 'کاروبار اور پروفائل کی ترتیبات'}
+                    </h2>
+                    <p className="text-xs font-medium text-slate-500 dark:text-zinc-400">
+                      {user.email} • <span className="font-bold text-[#059669]">{user.role}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveSettings} className="mt-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5">
+                        {language === 'en' ? 'Your Full Name' : 'آپ کا مکمل نام'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={settingsName}
+                        onChange={(e) => setSettingsName(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/70 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#059669]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1.5">
+                        {language === 'en' ? 'Business / Shop Name' : 'کاروبار یا دکان کا نام'}
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsBusiness}
+                        onChange={(e) => setSettingsBusiness(e.target.value)}
+                        placeholder={BRAND.name}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/70 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#059669]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingSettings}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black uppercase tracking-wider shadow-sm cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-[#D4AF37]" />
+                      <span>
+                        {isSavingSettings
+                          ? language === 'en'
+                            ? 'Saving...'
+                            : 'محفوظ ہو رہا ہے...'
+                          : language === 'en'
+                            ? 'Save Changes'
+                            : 'تبدیلیاں محفوظ کریں'}
+                      </span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Workspace Preferences */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
+                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                  {language === 'en' ? 'Workspace Preferences' : 'ایپ کی ترجیحات'}
+                </h3>
+
+                <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
+                        {language === 'en' ? 'Interface Language' : 'زبان (Language)'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">
+                        {language === 'en'
+                          ? 'Switch between English (LTR) and Urdu (RTL) layout.'
+                          : 'انگریزی اور اردو کے درمیان تبدیل کریں۔'}
+                      </p>
+                    </div>
+                    <LanguageToggle language={language} setLanguage={setLanguage} />
+                  </div>
+
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
+                        {language === 'en' ? 'Color Theme' : 'تھیم (ڈارک / لائٹ موڈ)'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">
+                        {language === 'en'
+                          ? 'Choose between light ledger mode and dark executive mode.'
+                          : 'لائٹ یا ڈارک موڈ منتخب کریں۔'}
+                      </p>
+                    </div>
+                    <ThemeToggle />
+                  </div>
+
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
+                        {language === 'en' ? 'Balance Privacy Shield' : 'بیلنس پرائیویسی'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">
+                        {language === 'en'
+                          ? 'Mask sensitive rupee amounts on the dashboard when customers are nearby.'
+                          : 'اسکرین پر موجود رقم کو چھپائیں۔'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHideBalance((prev) => !prev)}
+                      className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${
+                        hideBalance
+                          ? 'bg-emerald-50 border-emerald-200 text-[#064E3B] dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
+                      }`}
+                    >
+                      {hideBalance ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                      <span>{hideBalance ? (language === 'en' ? 'Hidden' : 'پوشیدہ') : (language === 'en' ? 'Visible' : 'ظاہر')}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data, Backups & Account Session */}
+              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
+                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                  {language === 'en' ? 'Data Protection & Session' : 'ڈیٹا بیک اپ اور اکاؤنٹ'}
+                </h3>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {user.role === 'Owner' && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('backups')}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-extrabold text-slate-700 dark:text-zinc-200 cursor-pointer transition-colors"
+                    >
+                      <Database className="h-4 w-4 text-[#059669]" />
+                      <span>{t.backups}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleManualExport}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-extrabold text-slate-700 dark:text-zinc-200 cursor-pointer transition-colors"
+                  >
+                    <Download className="h-4 w-4 text-[#059669]" />
+                    <span>{t.exportJson}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/70 dark:bg-red-950/30 hover:bg-red-100 text-xs font-extrabold text-red-600 dark:text-red-400 cursor-pointer transition-colors ltr:ml-auto rtl:mr-auto"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>{t.logout}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           )}
 
         </main>
@@ -2301,10 +3225,25 @@ export default function App() {
 
       {/* ==================== DRAWERS & MODALS BACKDROPS ==================== */}
 
+      {/* CUSTOMER ACCOUNT REPORT MODAL (Opened from Dashboard Quick Actions / Summary) */}
+      {dashboardReportCustomer && (
+        <CustomerAccountReportModal
+          customer={dashboardReportCustomer}
+          allTransactions={transactions}
+          businessName={user.businessName || BRAND.name}
+          language={language}
+          onClose={() => setDashboardReportCustomer(null)}
+        />
+      )}
+
       {/* CUSTOMER DRAWER */}
       {activeModal === 'customer' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-cust-modal"
               onClick={() => setActiveModal(null)}
@@ -2323,7 +3262,7 @@ export default function App() {
                   value={custName}
                   onChange={(e) => setCustName(e.target.value)}
                   placeholder={t.customerName}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0B192C] dark:focus:ring-[#D4AF37]"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#059669]"
                 />
               </div>
 
@@ -2374,20 +3313,24 @@ export default function App() {
                 <button
                   id="save-new-customer"
                   type="submit"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {t.save}
+                  <span className="uppercase tracking-wider">{t.save}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* SUPPLIER DRAWER */}
       {activeModal === 'supplier' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-supp-modal"
               onClick={() => setActiveModal(null)}
@@ -2457,20 +3400,24 @@ export default function App() {
                 <button
                   id="save-supplier-btn"
                   type="submit"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {t.save}
+                  <span className="uppercase tracking-wider">{t.save}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* LEDGER TRANSACTION DRAWERS */}
       {activeModal === 'transaction' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-tx-modal"
               onClick={() => setActiveModal(null)}
@@ -2557,16 +3504,13 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-slate-400 font-bold mb-1">{t.description}</label>
-                <input
-                  type="text"
-                  value={txDesc}
-                  onChange={(e) => setTxDesc(e.target.value)}
-                  placeholder={t.description}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none"
-                />
-              </div>
+              <VoiceDescriptionField
+                value={txDesc}
+                onChange={setTxDesc}
+                language={language}
+                label={t.description}
+                placeholder={t.description}
+              />
 
               <div className="flex flex-col-reverse sm:flex-row gap-2.5 justify-end pt-2">
                 <button
@@ -2579,20 +3523,24 @@ export default function App() {
                 <button
                   id="submit-tx-btn-modal"
                   type="submit"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {t.save}
+                  <span className="uppercase tracking-wider">{t.save}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* CASHBOOK ENTRY DRAWERS */}
       {activeModal === 'cashbook' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-cash-modal"
               onClick={() => setActiveModal(null)}
@@ -2712,20 +3660,24 @@ export default function App() {
                 <button
                   id="save-cash-receipt-btn"
                   type="submit"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {t.save}
+                  <span className="uppercase tracking-wider">{t.save}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* STOCK INVENTORY DRAWERS */}
       {activeModal === 'inventory' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-stock-modal"
               onClick={() => setActiveModal(null)}
@@ -2846,20 +3798,24 @@ export default function App() {
                 <button
                   id="submit-stock-btn"
                   type="submit"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {t.save}
+                  <span className="uppercase tracking-wider">{t.save}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* RETAIL INVOICE BUILDER DRAWER */}
       {activeModal === 'invoice' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto"
+          >
             <button
               id="close-invoice-modal"
               onClick={() => setActiveModal(null)}
@@ -2909,7 +3865,7 @@ export default function App() {
                     id="add-invoice-row-btn"
                     type="button"
                     onClick={addInvoiceRow}
-                    className="text-xs text-[#0B192C] dark:text-[#D4AF37] font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-[#059669] dark:text-[#D4AF37] font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
                     <span>{t.addItem}</span>
@@ -3008,7 +3964,7 @@ export default function App() {
                       type="checkbox"
                       checked={invIsPaid}
                       onChange={(e) => setInvIsPaid(e.target.checked)}
-                      className="h-4 w-4 rounded text-[#0B192C] focus:ring-[#D4AF37] border-slate-300 pointer-events-auto"
+                      className="h-4 w-4 rounded text-[#059669] focus:ring-[#059669] border-slate-300 pointer-events-auto"
                     />
                     <span className="text-xs text-slate-600 dark:text-zinc-300 font-semibold">{invoiceItems[0]?.name ? `${language === 'en' ? 'Check if fully paid' : 'بل ادا ہو گیا ہے'}` : 'Counter Paid check'}</span>
                   </div>
@@ -3026,13 +3982,13 @@ export default function App() {
                 <button
                   id="checkout-create-invoice-btn"
                   type="submit"
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black cursor-pointer"
                 >
-                  {language === 'en' ? 'Checkout & Print Receipt (بل تیار کریں)' : 'بل بنائیں اور رسید پرنٹ کریں'}
+                  <span>{language === 'en' ? 'Checkout & Print Receipt (بل تیار کریں)' : 'بل بنائیں اور رسید پرنٹ کریں'}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -3050,7 +4006,11 @@ export default function App() {
       {/* BACKUPS & RECOVERY MODAL */}
       {activeModal === 'backups' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative my-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative my-auto"
+          >
             <button
               type="button"
               id="close-backups-modal"
@@ -3061,7 +4021,7 @@ export default function App() {
             </button>
 
             <div className="flex items-start sm:items-center gap-3 border-b border-slate-100 dark:border-zinc-800 pb-4 mb-5 pr-6">
-              <div className="p-2.5 bg-[#0B192C]/10 dark:bg-[#D4AF37]/15 rounded-xl text-[#0B192C] dark:text-[#D4AF37] shrink-0">
+              <div className="p-2.5 bg-emerald-50 dark:bg-[#D4AF37]/15 rounded-xl text-[#059669] dark:text-[#D4AF37] shrink-0">
                 <Database className="h-6 w-6" />
               </div>
               <div className="text-left min-w-0">
@@ -3093,7 +4053,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleManualExport}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0B192C] hover:bg-[#152A47] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-meezan-btn text-white transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                 >
                   <Download className="h-4 w-4 text-[#D4AF37]" />
                   <span>{language === 'en' ? 'Download Backup (.json)' : 'بیک اپ فائل ڈاؤن لوڈ کریں'}</span>
@@ -3113,8 +4073,8 @@ export default function App() {
                   </p>
                 </div>
                 
-                <label className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 dark:border-zinc-700 hover:border-[#0B192C] dark:hover:border-[#D4AF37] text-slate-700 dark:text-zinc-300 transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer">
-                  <UploadCloud className="h-4 w-4 text-[#D4AF37]" />
+                <label className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 dark:border-zinc-700 hover:border-[#059669] dark:hover:border-[#D4AF37] text-slate-700 dark:text-zinc-300 transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer">
+                  <UploadCloud className="h-4 w-4 text-[#059669]" />
                   <span>{language === 'en' ? 'Upload Backup File' : 'بیک اپ فائل منتخب کریں'}</span>
                   <input
                     type="file"
@@ -3128,7 +4088,7 @@ export default function App() {
 
             {/* Manual Checkpoint Area */}
             <div className="p-4 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200/80 dark:border-zinc-800 rounded-xl mb-6 text-left">
-              <h4 className="text-xs font-bold text-[#0B192C] dark:text-[#D4AF37] uppercase tracking-wider mb-2">
+              <h4 className="text-xs font-bold text-[#042F24] dark:text-[#D4AF37] uppercase tracking-wider mb-2">
                 {language === 'en' ? 'Create a Manual Safety Checkpoint' : 'دستی بیک اپ پوائنٹ محفوظ کریں'}
               </h4>
               <form onSubmit={handleCreateBackup} className="flex flex-col sm:flex-row gap-2">
@@ -3142,14 +4102,14 @@ export default function App() {
                   }
                   value={backupLabel}
                   onChange={(e) => setBackupLabel(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#0B192C]"
+                  className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#059669]"
                 />
                 <button
                   type="submit"
                   disabled={isSavingBackup}
-                  className="px-4 py-2.5 bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+                  className="px-4 py-2.5 bg-meezan-btn text-white rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isSavingBackup ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3.5 w-3.5 text-[#D4AF37] ${isSavingBackup ? 'animate-spin' : ''}`} />
                   <span>{language === 'en' ? 'Save Checkpoint' : 'سیو بیک اپ'}</span>
                 </button>
               </form>
@@ -3169,7 +4129,7 @@ export default function App() {
 
               {isLoadingBackups ? (
                 <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
-                  <RefreshCw className="h-6 w-5 animate-spin text-[#D4AF37]" />
+                  <RefreshCw className="h-6 w-5 animate-spin text-[#059669]" />
                   <span>{language === 'en' ? 'Querying stored checkpoints...' : 'پوائنٹس لوڈ ہو رہے ہیں...'}</span>
                 </div>
               ) : backups.length === 0 ? (
@@ -3217,7 +4177,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => handleRestoreBackup(bc.id, bc.label)}
-                          className="w-full sm:w-auto px-3.5 py-2 text-[#0B192C] dark:text-[#D4AF37] bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap"
+                          className="w-full sm:w-auto px-3.5 py-2 text-[#042F24] dark:text-[#D4AF37] bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap"
                         >
                           {language === 'en' ? 'Restore State ↩' : 'بحال کریں'}
                         </button>
@@ -3227,133 +4187,93 @@ export default function App() {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* CUSTOM CONFIRMATION OVERLAY (Bypass Sandboxed iframe blockages) */}
-      {confirmState && confirmState.isOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/75 backdrop-blur-xs flex justify-center items-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl relative text-center">
-            
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 mb-4">
-              <AlertTriangle className="h-6 w-6" />
-            </div>
-
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-2">
-              {confirmState.title}
-            </h3>
-            
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mb-6 leading-relaxed break-words">
-              {confirmState.message}
-            </p>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmState(null)}
-                className="w-full px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors rounded-xl border border-slate-200 dark:border-zinc-700 cursor-pointer"
-              >
-                {language === 'en' ? 'Cancel' : 'منسوخ کریں'}
-              </button>
-              
-              <button
-                type="button"
-                onClick={confirmState.onConfirm}
-                className="w-full px-4 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-500 transition-colors rounded-xl shadow-xs cursor-pointer"
-              >
-                {confirmState.confirmBtnText || (language === 'en' ? 'Confirm' : 'تصدیق کریں')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CUSTOM ALERT/NOTIFICATION OVERLAY */}
-      {alertState && alertState.isOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-xs p-5 sm:p-6 shadow-2xl relative text-center animate-in fade-in zoom-in-95 duration-150">
-            
-            <div className="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-[#0B192C]/10 dark:bg-[#D4AF37]/20 text-[#0B192C] dark:text-[#D4AF37] mb-3">
-              <Info className="h-5 w-5" />
-            </div>
-
-            <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1.5">
-              {alertState.title}
-            </h4>
-            
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mb-5 leading-normal font-medium break-words">
-              {alertState.message}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setAlertState(null)}
-              className="w-full px-4 py-2.5 text-xs font-bold text-white dark:text-[#0B192C] bg-[#0B192C] hover:bg-[#152A47] dark:bg-[#D4AF37] rounded-xl transition-all cursor-pointer shadow-xs"
+      <AnimatePresence>
+        {confirmState && confirmState.isOpen && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/75 backdrop-blur-xs flex justify-center items-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl relative text-center"
             >
-              {language === 'en' ? 'OK / Understand' : 'ٹھیک ہے'}
-            </button>
-          </div>
-        </div>
-      )}
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 mb-4">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-zinc-800 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)] pb-safe">
-        <ul className="flex items-center justify-around h-16 w-full max-w-lg mx-auto px-1">
-          {[
-            { id: 'dashboard', name: t.dashboard, icon: TrendingUp },
-            { id: 'customers', name: t.customers, icon: Users },
-            { id: 'suppliers', name: t.suppliers, icon: Truck },
-            { id: 'cashbook', name: t.cashBook, icon: Wallet },
-            { id: 'inventory', name: t.inventory, icon: Package },
-            { id: 'invoices', name: t.invoices, icon: FileSpreadsheet }
-          ].map((item) => {
-            const IconComponent = item.icon;
-            const isSelected = activeTab === item.id;
-            return (
-              <li key={item.id} className="flex-1 min-w-0">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-2">
+                {confirmState.title}
+              </h3>
+              
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-6 leading-relaxed break-words">
+                {confirmState.message}
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setActiveTab(item.id as any);
-                    setSearchTerm('');
-                    setFilterOption('all');
-                    if (item.id === 'customers') {
-                      setSelectedCustomerId(null);
-                    }
-                  }}
-                  className={`relative w-full h-full flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${
-                    isSelected
-                      ? 'text-[#0B192C] dark:text-[#D4AF37]'
-                      : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
-                  }`}
+                  onClick={() => setConfirmState(null)}
+                  className="w-full px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors rounded-xl border border-slate-200 dark:border-zinc-700 cursor-pointer"
                 >
-                  {isSelected && (
-                    <span className="absolute top-1/2 -translate-y-1/2 w-9 h-9 bg-slate-100 dark:bg-zinc-800 rounded-full -z-10" />
-                  )}
-                  <IconComponent className={`h-4.5 w-4.5 transition-transform duration-200 ${isSelected ? 'scale-110 text-[#0B192C] dark:text-[#D4AF37]' : 'scale-100'}`} />
-                  <span className="text-[9px] font-bold tracking-tight truncate max-w-full px-0.5 text-center">
-                    {item.name}
-                  </span>
-                  
-                  {item.id === 'inventory' && lowStockItems.length > 0 && (
-                     <span className="absolute top-1.5 right-1/4 translate-x-1.5 flex h-2 w-2">
-                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                     </span>
-                  )}
+                  {language === 'en' ? 'Cancel' : 'منسوخ کریں'}
                 </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+                
+                <button
+                  type="button"
+                  onClick={confirmState.onConfirm}
+                  className="w-full px-4 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-500 transition-colors rounded-xl shadow-xs cursor-pointer"
+                >
+                  {confirmState.confirmBtnText || (language === 'en' ? 'Confirm' : 'تصدیق کریں')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CUSTOM ALERT/NOTIFICATION OVERLAY */}
+      <AnimatePresence>
+        {alertState && alertState.isOpen && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-xs p-5 sm:p-6 shadow-2xl relative text-center"
+            >
+              <div className="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-emerald-50 dark:bg-zinc-800 text-[#059669] mb-3">
+                <Info className="h-5 w-5" />
+              </div>
+
+              <h4 className="text-sm font-black text-slate-900 dark:text-white mb-1.5">
+                {alertState.title}
+              </h4>
+              
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-5 leading-normal font-medium break-words">
+                {alertState.message}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setAlertState(null)}
+                className="w-full px-4 py-2.5 text-xs font-black text-white bg-meezan-btn rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <span>{language === 'en' ? 'OK / Understand' : 'ٹھیک ہے'}</span>
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
           </div>
         )}
       </div>
 
       {/* GLOBAL PERSISTENT FOOTER */}
-      <Footer hasMobileBottomNav={!!user} />
+      <Footer hasMobileBottomNav={false} />
     </div>
   );
 }

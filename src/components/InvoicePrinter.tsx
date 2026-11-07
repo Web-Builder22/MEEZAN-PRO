@@ -18,7 +18,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-2.5 sm:p-4">
       <div className="bg-white text-gray-800 rounded-2xl w-full max-w-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header toolbar */}
-        <div className="bg-[#0B192C] text-white p-3 sm:p-4 flex flex-wrap justify-between items-center gap-2.5 print:hidden">
+        <div className="bg-[#042F24] text-white p-3 sm:p-4 flex flex-wrap justify-between items-center gap-2.5 print:hidden">
           <div className="flex items-center gap-2 min-w-0">
             <FileText className="h-[18px] w-[18px] text-[#D4AF37] shrink-0" />
             <span className="font-semibold text-xs sm:text-sm truncate">
@@ -29,7 +29,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
             <button
               id="print-btn"
               onClick={triggerPrint}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D4AF37] hover:bg-[#C5A028] text-[#0B192C] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D4AF37] hover:bg-[#C5A028] text-[#042F24] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
             >
               <Printer className="h-3.5 w-3.5 shrink-0" />
               <span>{lang === 'en' ? 'Print / Save PDF' : 'پرنٹ / پی ڈی ایف'}</span>
@@ -37,7 +37,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
             <button
               id="close-preview-btn"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
             >
               {lang === 'en' ? 'Dismiss' : 'بند کریں'}
             </button>
@@ -49,7 +49,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
           {/* Store Title */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-4 sm:pb-6 mb-5 sm:mb-6 gap-3 sm:gap-4">
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#0B192C] tracking-tight select-all break-words">
+              <h2 className="text-xl sm:text-2xl font-black text-[#042F24] tracking-tight select-all break-words">
                 {businessName}
               </h2>
               <p className="text-xs text-slate-500 mt-1 select-all font-mono">
@@ -73,7 +73,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
             <div className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200/80 select-all">
               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1.5">{lang === 'en' ? 'Bill To:' : 'بل بنام:'}</span>
               <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm break-words">
-                <User id="invoice-user-icon" className="h-4 w-4 text-[#0B192C] shrink-0" />
+                <User id="invoice-user-icon" className="h-4 w-4 text-[#059669] shrink-0" />
                 <span>{invoice.customerName}</span>
               </h4>
               {invoice.customerPhone && (
@@ -104,7 +104,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
                     <td className="py-2.5 sm:py-3 px-1.5 sm:px-2 font-medium text-slate-900 break-words">{item.name}</td>
                     <td className="py-2.5 sm:py-3 px-1.5 sm:px-2 text-right text-slate-600 font-mono whitespace-nowrap">{item.quantity}</td>
                     <td className="py-2.5 sm:py-3 px-1.5 sm:px-2 text-right text-slate-600 font-mono whitespace-nowrap">Rs {item.price.toLocaleString()}</td>
-                    <td className="py-2.5 sm:py-3 px-1.5 sm:px-2 text-right font-semibold text-[#0B192C] font-mono whitespace-nowrap">Rs {item.total.toLocaleString()}</td>
+                    <td className="py-2.5 sm:py-3 px-1.5 sm:px-2 text-right font-semibold text-[#042F24] font-mono whitespace-nowrap">Rs {item.total.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -133,7 +133,7 @@ export default function InvoicePrinter({ invoice, businessName, lang, onClose }:
                   <span>+ Rs {invoice.tax.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between font-black text-lg text-[#0B192C] border-t-2 border-[#0B192C] pt-2 text-right leading-none">
+              <div className="flex justify-between font-black text-lg text-[#042F24] border-t-2 border-[#042F24] pt-2 text-right leading-none">
                 <span>{lang === 'en' ? 'Total' : 'کل رقم'}:</span>
                 <span>Rs {invoice.total.toLocaleString()}</span>
               </div>
