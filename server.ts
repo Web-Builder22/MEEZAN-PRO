@@ -17,6 +17,15 @@ import {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+const EXCEL_BACKUPS_ROOT = path.join(DATA_DIR, 'Meezan Flow Backups');
+const EXCEL_SUBFOLDERS = [
+  'Customers',
+  'Suppliers',
+  'Invoices',
+  'Inventory',
+  'Complete_Backups',
+  'Backup_History'
+] as const;
 
 // Helper to secure data directories
 if (!fs.existsSync(DATA_DIR)) {
@@ -24,6 +33,15 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 if (!fs.existsSync(BACKUPS_DIR)) {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+}
+if (!fs.existsSync(EXCEL_BACKUPS_ROOT)) {
+  fs.mkdirSync(EXCEL_BACKUPS_ROOT, { recursive: true });
+}
+for (const sub of EXCEL_SUBFOLDERS) {
+  const subPath = path.join(EXCEL_BACKUPS_ROOT, sub);
+  if (!fs.existsSync(subPath)) {
+    fs.mkdirSync(subPath, { recursive: true });
+  }
 }
 
 // Initial clean database structure
@@ -65,9 +83,12 @@ function saveDb(data: any) {
 let db = loadDb();
 
 // Function to create database backup snapshot before destructive changes or manual saving
-function createBackupSnapshot(label: string) {
+function createBackupSnapshot(
+  label: string,
+  backupType: 'manual' | 'daily' | 'hourly' | 'emergency' = 'manual'
+) {
   try {
-    const id = 'bk_' + Date.now();
+    const id = 'bk_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const timestamp = new Date().toISOString();
     const counts = {
       customers: db?.customers?.length || 0,
@@ -77,9 +98,10 @@ function createBackupSnapshot(label: string) {
       inventory: db?.inventory?.length || 0,
       invoices: db?.invoices?.length || 0
     };
-    
-    const backupData = {
-      metadata: { id, timestamp, label, counts },
+
+    const filepath = path.join(BACKUPS_DIR, `${id}.json`);
+    const initialPayload = {
+      metadata: { id, timestamp, label, counts, backupType, size: 0 },
       db: {
         customers: db?.customers || [],
         suppliers: db?.suppliers || [],
@@ -90,41 +112,24 @@ function createBackupSnapshot(label: string) {
       }
     };
 
-    const filepath = path.join(BACKUPS_DIR, `${id}.json`);
-    fs.writeFileSync(filepath, JSON.stringify(backupData, null, 2), 'utf-8');
-    return { id, timestamp, label, counts };
+    const prelimJson = JSON.stringify(initialPayload, null, 2);
+    const byteSize = Buffer.byteLength(prelimJson, 'utf-8');
+    initialPayload.metadata.size = byteSize;
+
+    const finalJson = JSON.stringify(initialPayload, null, 2);
+    fs.writeFileSync(filepath, finalJson, 'utf-8');
+    const stat = fs.statSync(filepath);
+    return { id, timestamp, label, counts, backupType, size: stat.size };
   } catch (err) {
     console.error('Failed to create backup snapshot', err);
     return null;
   }
 }
 
-// Keep maximum 20 safety backups to prevent disk bloat
+// Retention Policy: Never automatically delete historical backups.
+// Administrators manage deletion manually after explicit confirmation.
 function cleanOldBackups() {
-  try {
-    const files = fs.readdirSync(BACKUPS_DIR)
-      .filter(f => f.endsWith('.json'))
-      .map(f => {
-        const fp = path.join(BACKUPS_DIR, f);
-        const stat = fs.statSync(fp);
-        return { name: f, path: fp, mtime: stat.mtimeMs };
-      });
-    
-    files.sort((a, b) => a.mtime - b.mtime);
-    
-    if (files.length > 20) {
-      const toDelete = files.slice(0, files.length - 20);
-      toDelete.forEach(f => {
-        try {
-          fs.unlinkSync(f.path);
-        } catch (e) {
-          console.error('Failed to remove old backup', f.path, e);
-        }
-      });
-    }
-  } catch (err) {
-    console.error('Error cleaning old backups', err);
-  }
+  // Intentionally retained: no automatic pruning of historical backups.
 }
 
 async function startServer() {
@@ -419,7 +424,7 @@ async function startServer() {
   });
 
   app.post('/api/customers', authenticateUser, (req, res) => {
-    const { name, phone, email, initialBalance, promisedPaymentDate, promisedPaymentNote } = req.body;
+    const { name, phone, email, address, initialBalance, promisedPaymentDate, promisedPaymentNote } = req.body;
     if (!name || !phone) {
       return res.status(400).json({ error: 'Customer Name and Phone number are required' });
     }
@@ -431,6 +436,8 @@ async function startServer() {
       name: String(name).trim(),
       phone: String(phone).trim(),
       email: email ? String(email).trim() : '',
+      address: address ? String(address).trim() : '',
+      createdAt: nowIso,
       balance: Number(initialBalance) || 0,
       updatedAt: nowIso,
       businessId: bizId,
@@ -462,7 +469,7 @@ async function startServer() {
   });
 
   app.put('/api/customers/:id', authenticateUser, (req, res) => {
-    const { name, phone, email, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = req.body;
+    const { name, phone, email, address, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = req.body;
     const bizId = (req as any).user?.businessId || 'b1';
     const index = db.customers.findIndex((c: Customer) => c.id === req.params.id && (c.businessId || 'b1') === bizId);
     if (index === -1) {
@@ -475,6 +482,7 @@ async function startServer() {
       name: updatedName,
       phone: phone ? String(phone).trim() : db.customers[index].phone,
       email: email !== undefined ? String(email).trim() : db.customers[index].email,
+      address: address !== undefined ? String(address).trim() : db.customers[index].address,
       balance: balance !== undefined ? Number(balance) : db.customers[index].balance,
       promisedPaymentDate:
         promisedPaymentDate !== undefined
@@ -534,18 +542,20 @@ async function startServer() {
   });
 
   app.post('/api/suppliers', authenticateUser, (req, res) => {
-    const { name, phone, email, initialBalance } = req.body;
+    const { name, phone, email, address, initialBalance } = req.body;
     if (!name || !phone) {
       return res.status(400).json({ error: 'Supplier Name and Phone are required' });
     }
-    
+    const nowIso = new Date().toISOString();
     const newSupplier: Supplier = {
       id: 's_' + Math.random().toString(36).substring(2, 9),
-      name,
-      phone,
-      email: email || '',
+      name: String(name).trim(),
+      phone: String(phone).trim(),
+      email: email ? String(email).trim() : '',
+      address: address ? String(address).trim() : '',
+      createdAt: nowIso,
       balance: Number(initialBalance) || 0,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
       businessId: 'b1'
     };
     
@@ -555,7 +565,7 @@ async function startServer() {
   });
 
   app.put('/api/suppliers/:id', authenticateUser, (req, res) => {
-    const { name, phone, email, balance } = req.body;
+    const { name, phone, email, address, balance } = req.body;
     const index = db.suppliers.findIndex(s => s.id === req.params.id);
     if (index === -1) {
       return res.status(404).json({ error: 'Supplier not found' });
@@ -566,6 +576,7 @@ async function startServer() {
       name: name || db.suppliers[index].name,
       phone: phone || db.suppliers[index].phone,
       email: email !== undefined ? email : db.suppliers[index].email,
+      address: address !== undefined ? String(address).trim() : db.suppliers[index].address,
       balance: balance !== undefined ? Number(balance) : db.suppliers[index].balance,
       updatedAt: new Date().toISOString()
     };
@@ -962,15 +973,21 @@ async function startServer() {
       const files = fs.readdirSync(BACKUPS_DIR).filter(f => f.endsWith('.json'));
       const backupsList = files.map(f => {
         try {
-          const fileContent = fs.readFileSync(path.join(BACKUPS_DIR, f), 'utf-8');
+          const fullPath = path.join(BACKUPS_DIR, f);
+          const stat = fs.statSync(fullPath);
+          const fileContent = fs.readFileSync(fullPath, 'utf-8');
           const parsed = JSON.parse(fileContent);
-          return parsed.metadata;
+          if (!parsed || !parsed.metadata) return null;
+          return {
+            ...parsed.metadata,
+            size: parsed.metadata.size || stat.size
+          };
         } catch (e) {
           return null;
         }
       }).filter(Boolean);
       
-      // Sort descending by timestamp (newest first)
+      // Sort descending by timestamp (newest first) — all historical backups retained
       backupsList.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       res.json(backupsList);
     } catch (err) {
@@ -984,14 +1001,35 @@ async function startServer() {
       return res.status(403).json({ error: 'Only Owners can manually create backup checkpoints' });
     }
     
-    const { label } = req.body;
-    const labelSanitized = (label || 'Manual User Checkpoint').slice(0, 100);
-    const snapshot = createBackupSnapshot(labelSanitized);
+    const { label, backupType } = req.body || {};
+    const validTypes = ['manual', 'daily', 'hourly', 'emergency'];
+    const resolvedType = validTypes.includes(backupType) ? backupType : 'manual';
+    const labelSanitized = (label || 'Manual User Checkpoint').slice(0, 120);
+    const snapshot = createBackupSnapshot(labelSanitized, resolvedType as any);
     if (snapshot) {
-      cleanOldBackups();
       res.status(201).json({ message: 'Database backup checkpoint created successfully', snapshot });
     } else {
       res.status(500).json({ error: 'Failed to create backup snapshot file' });
+    }
+  });
+
+  app.delete('/api/backups/:id', authenticateUser, (req, res) => {
+    const role = (req as any).user.role;
+    if (role !== 'Owner') {
+      return res.status(403).json({ error: 'Only authorized Administrators (Owner) can delete historical backups' });
+    }
+
+    const safeId = path.basename(String(req.params.id || ''));
+    const filepath = path.join(BACKUPS_DIR, `${safeId}.json`);
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup checkpoint file not found' });
+    }
+
+    try {
+      fs.unlinkSync(filepath);
+      return res.json({ message: 'Historical backup checkpoint deleted permanently.', id: safeId });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Failed to delete backup checkpoint' });
     }
   });
 
@@ -1001,29 +1039,62 @@ async function startServer() {
       return res.status(403).json({ error: 'Only Owners can restore older database backups' });
     }
     
-    const { id } = req.params;
-    const filepath = path.join(BACKUPS_DIR, `${id}.json`);
+    const safeId = path.basename(String(req.params.id || ''));
+    const filepath = path.join(BACKUPS_DIR, `${safeId}.json`);
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ error: 'Backup checkpoint file not found' });
     }
     
     try {
-      // Save safety snapshot of current state before overwrite
-      createBackupSnapshot(`Auto-backup before restoring Checkpoint ID: ${id}`);
-      
       const fileContent = fs.readFileSync(filepath, 'utf-8');
       const backupObj = JSON.parse(fileContent);
+
+      // Step 1: Verify integrity of the selected backup before mutating db
+      if (!backupObj || !backupObj.db || typeof backupObj.db !== 'object') {
+        return res.status(400).json({ error: 'Backup integrity check failed: corrupted snapshot structure.' });
+      }
+
+      const dedupeById = <T extends { id: string }>(arr: T[]): T[] => {
+        const seen = new Map<string, T>();
+        for (const item of arr || []) {
+          if (item && item.id) {
+            seen.set(String(item.id), item);
+          }
+        }
+        return Array.from(seen.values());
+      };
+
+      // Step 2: Automatically create an emergency snapshot of the current database before restoring
+      const emergencySnapshot = createBackupSnapshot(
+        `Emergency Pre-Restore Snapshot (before restoring ${backupObj.metadata?.label || safeId})`,
+        'emergency'
+      );
       
-      db.customers = backupObj.db.customers || [];
-      db.suppliers = backupObj.db.suppliers || [];
-      db.transactions = backupObj.db.transactions || [];
-      db.cashbook = backupObj.db.cashbook || [];
-      db.inventory = backupObj.db.inventory || [];
-      db.invoices = backupObj.db.invoices || [];
+      // Step 3: Restore all modules consistently with unique ID deduplication
+      db.customers = dedupeById(Array.isArray(backupObj.db.customers) ? backupObj.db.customers : []);
+      db.suppliers = dedupeById(Array.isArray(backupObj.db.suppliers) ? backupObj.db.suppliers : []);
+      db.transactions = dedupeById(Array.isArray(backupObj.db.transactions) ? backupObj.db.transactions : []);
+      db.cashbook = dedupeById(Array.isArray(backupObj.db.cashbook) ? backupObj.db.cashbook : []);
+      db.inventory = dedupeById(Array.isArray(backupObj.db.inventory) ? backupObj.db.inventory : []);
+      db.invoices = dedupeById(Array.isArray(backupObj.db.invoices) ? backupObj.db.invoices : []);
       
       saveDb(db);
-      cleanOldBackups();
-      res.json({ message: 'Success! Ledger database rolled back to: ' + backupObj.metadata.label });
+
+      // Step 4: Verify restored record counts
+      const verifiedCounts = {
+        customers: db.customers.length,
+        suppliers: db.suppliers.length,
+        invoices: db.invoices.length,
+        inventory: db.inventory.length,
+        transactions: db.transactions.length,
+        cashbook: db.cashbook.length
+      };
+
+      res.json({
+        message: `Success! Ledger database restored to "${backupObj.metadata?.label || safeId}". Verified ${verifiedCounts.customers} Customers, ${verifiedCounts.suppliers} Suppliers, ${verifiedCounts.invoices} Invoices, and ${verifiedCounts.inventory} Inventory products.`,
+        verifiedCounts,
+        emergencySnapshot
+      });
     } catch (err) {
       res.status(500).json({ error: 'Failed to restore database from snapshot checkpoint' });
     }
@@ -1032,29 +1103,225 @@ async function startServer() {
   app.post('/api/backups/upload', authenticateUser, (req, res) => {
     const role = (req as any).user.role;
     if (role !== 'Owner') {
-      return res.status(403).json({ error: 'Only Owners can upload custom backup json files' });
+      return res.status(403).json({ error: 'Only Owners can upload and restore backup files' });
     }
     
-    const { backupData } = req.body;
-    if (!backupData || !backupData.customers) {
-      return res.status(400).json({ error: 'Invalid backup structure. Must contain standard ledger records.' });
+    const { backupData, sourceLabel } = req.body || {};
+    if (
+      !backupData ||
+      (!Array.isArray(backupData.customers) &&
+        !Array.isArray(backupData.suppliers) &&
+        !Array.isArray(backupData.invoices) &&
+        !Array.isArray(backupData.inventory))
+    ) {
+      return res.status(400).json({ error: 'Backup integrity check failed: Must contain valid ledger records.' });
     }
     
     try {
-      createBackupSnapshot('Auto-backup before importing custom json file');
+      const dedupeById = <T extends { id: string }>(arr: T[]): T[] => {
+        const seen = new Map<string, T>();
+        for (const item of arr || []) {
+          if (item && item.id) {
+            seen.set(String(item.id), item);
+          }
+        }
+        return Array.from(seen.values());
+      };
+
+      // Automatically create an emergency snapshot of the current database before restoring
+      const emergencySnapshot = createBackupSnapshot(
+        `Emergency Pre-Restore Snapshot (before restoring ${sourceLabel || 'Excel Backup'})`,
+        'emergency'
+      );
       
-      db.customers = backupData.customers || [];
-      db.suppliers = backupData.suppliers || [];
-      db.transactions = backupData.transactions || [];
-      db.cashbook = backupData.cashbook || [];
-      db.inventory = backupData.inventory || [];
-      db.invoices = backupData.invoices || [];
+      if (Array.isArray(backupData.customers)) db.customers = dedupeById(backupData.customers);
+      if (Array.isArray(backupData.suppliers)) db.suppliers = dedupeById(backupData.suppliers);
+      if (Array.isArray(backupData.transactions)) db.transactions = dedupeById(backupData.transactions);
+      if (Array.isArray(backupData.cashbook)) db.cashbook = dedupeById(backupData.cashbook);
+      if (Array.isArray(backupData.inventory)) db.inventory = dedupeById(backupData.inventory);
+      if (Array.isArray(backupData.invoices)) db.invoices = dedupeById(backupData.invoices);
       
       saveDb(db);
-      cleanOldBackups();
-      res.json({ message: 'Success! Custom backup JSON file imported successfully.' });
+
+      const verifiedCounts = {
+        customers: db.customers.length,
+        suppliers: db.suppliers.length,
+        invoices: db.invoices.length,
+        inventory: db.inventory.length,
+        transactions: db.transactions.length,
+        cashbook: db.cashbook.length
+      };
+
+      res.json({
+        message: `Success! Backup data restored and verified (${verifiedCounts.customers} Customers, ${verifiedCounts.suppliers} Suppliers, ${verifiedCounts.invoices} Invoices, ${verifiedCounts.inventory} Inventory items). Emergency snapshot saved.`,
+        verifiedCounts,
+        emergencySnapshot
+      });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to import custom backup file structure' });
+      res.status(500).json({ error: 'Failed to import backup file structure' });
+    }
+  });
+
+  // --- Organized Excel (.xlsx) Backup Endpoints (Meezan Flow Backups/) ---
+  app.post('/api/excel-backups/upload', (req, res) => {
+    try {
+      const { folderName, fileName, base64Data } = req.body || {};
+      if (!folderName || !fileName || !base64Data) {
+        return res.status(400).json({ error: 'folderName, fileName, and base64Data are required' });
+      }
+      const allowedFolders = new Set<string>(EXCEL_SUBFOLDERS);
+      const safeFolder = allowedFolders.has(folderName) ? folderName : 'Complete_Backups';
+      const safeFileName = path.basename(String(fileName));
+      if (!safeFileName.toLowerCase().endsWith('.xlsx')) {
+        return res.status(400).json({ error: 'Only .xlsx files are permitted' });
+      }
+
+      const folderDir = path.join(EXCEL_BACKUPS_ROOT, safeFolder);
+      if (!fs.existsSync(folderDir)) {
+        fs.mkdirSync(folderDir, { recursive: true });
+      }
+
+      const targetPath = path.join(folderDir, safeFileName);
+      const tempPath = `${targetPath}.tmp_${Date.now()}`;
+      const buffer = Buffer.from(base64Data, 'base64');
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: 'Cannot save empty Excel buffer' });
+      }
+
+      // Atomic write via temp file rename so partial writes can never corrupt existing backups
+      fs.writeFileSync(tempPath, buffer);
+      fs.renameSync(tempPath, targetPath);
+
+      const stat = fs.statSync(targetPath);
+      const fileInfo = {
+        id: `local:${safeFolder}/${safeFileName}`,
+        name: safeFileName,
+        modifiedTime: stat.mtime.toISOString(),
+        size: String(stat.size),
+        webViewLink: `/api/excel-backups/file/${encodeURIComponent(safeFolder)}/${encodeURIComponent(safeFileName)}`
+      };
+
+      return res.json(fileInfo);
+    } catch (err: any) {
+      console.error('Failed to store Excel backup file:', err);
+      return res.status(500).json({ error: err?.message || 'Failed to store Excel backup file' });
+    }
+  });
+
+  app.get('/api/excel-backups/status', (req, res) => {
+    try {
+      const folders = {
+        rootFolderId: 'local:Meezan Flow Backups',
+        customersFolderId: 'Customers',
+        suppliersFolderId: 'Suppliers',
+        invoicesFolderId: 'Invoices',
+        inventoryFolderId: 'Inventory',
+        completeBackupsFolderId: 'Complete_Backups',
+        backupHistoryFolderId: 'Backup_History'
+      };
+
+      const getFileStatInfo = (folderName: string, fileName: string, moduleKey: string) => {
+        const fp = path.join(EXCEL_BACKUPS_ROOT, folderName, fileName);
+        if (!fs.existsSync(fp)) return null;
+        const stat = fs.statSync(fp);
+        return {
+          id: `local:${folderName}/${fileName}`,
+          name: fileName,
+          modifiedTime: stat.mtime.toISOString(),
+          size: String(stat.size),
+          webViewLink: `/api/excel-backups/file/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`,
+          module: moduleKey
+        };
+      };
+
+      const moduleFiles: Record<string, any> = {};
+      const cust = getFileStatInfo('Customers', 'Customers_Backup.xlsx', 'customers');
+      const supp = getFileStatInfo('Suppliers', 'Suppliers_Backup.xlsx', 'suppliers');
+      const inv = getFileStatInfo('Invoices', 'Invoices_Backup.xlsx', 'invoices');
+      const stock = getFileStatInfo('Inventory', 'Inventory_Backup.xlsx', 'inventory');
+      const comp =
+        getFileStatInfo('Complete_Backups', 'Meezan_Flow_Backup.xlsx', 'complete') ||
+        getFileStatInfo('Complete_Backups', 'Meezan_Flow_Full_Backup.xlsx', 'complete');
+
+      if (cust) moduleFiles.customers = cust;
+      if (supp) moduleFiles.suppliers = supp;
+      if (inv) moduleFiles.invoices = inv;
+      if (stock) moduleFiles.inventory = stock;
+      if (comp) moduleFiles.complete = comp;
+
+      const historyDir = path.join(EXCEL_BACKUPS_ROOT, 'Backup_History');
+      let historyFiles: any[] = [];
+      if (fs.existsSync(historyDir)) {
+        // Never automatically truncate or delete historical backups
+        historyFiles = fs
+          .readdirSync(historyDir)
+          .filter((f) => f.toLowerCase().endsWith('.xlsx'))
+          .map((fileName) => {
+            const fp = path.join(historyDir, fileName);
+            const stat = fs.statSync(fp);
+            return {
+              id: `local:Backup_History/${fileName}`,
+              name: fileName,
+              modifiedTime: stat.mtime.toISOString(),
+              size: String(stat.size),
+              webViewLink: `/api/excel-backups/file/Backup_History/${encodeURIComponent(fileName)}`,
+              module: 'history',
+              _mtimeMs: stat.mtimeMs
+            };
+          })
+          .sort((a, b) => b._mtimeMs - a._mtimeMs)
+          .map(({ _mtimeMs, ...rest }) => rest);
+      }
+
+      return res.json({ folders, moduleFiles, historyFiles });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Failed to read Excel backup status' });
+    }
+  });
+
+  app.get('/api/excel-backups/file/:folderName/:fileName', (req, res) => {
+    try {
+      const allowedFolders = new Set<string>(EXCEL_SUBFOLDERS);
+      const safeFolder = allowedFolders.has(req.params.folderName) ? req.params.folderName : '';
+      const safeFileName = path.basename(String(req.params.fileName || ''));
+      if (!safeFolder || !safeFileName.toLowerCase().endsWith('.xlsx')) {
+        return res.status(404).json({ error: 'Excel backup file not found' });
+      }
+      const fp = path.join(EXCEL_BACKUPS_ROOT, safeFolder, safeFileName);
+      if (!fs.existsSync(fp)) {
+        return res.status(404).json({ error: 'Excel backup file not found' });
+      }
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+      return res.sendFile(fp);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Failed to download Excel backup file' });
+    }
+  });
+
+  app.delete('/api/excel-backups/file/:folderName/:fileName', authenticateUser, (req, res) => {
+    const role = (req as any).user.role;
+    if (role !== 'Owner') {
+      return res.status(403).json({ error: 'Only authorized Administrators (Owner) can delete backup files' });
+    }
+    try {
+      const allowedFolders = new Set<string>(EXCEL_SUBFOLDERS);
+      const safeFolder = allowedFolders.has(req.params.folderName) ? req.params.folderName : '';
+      const safeFileName = path.basename(String(req.params.fileName || ''));
+      if (!safeFolder || !safeFileName.toLowerCase().endsWith('.xlsx')) {
+        return res.status(404).json({ error: 'Excel backup file not found' });
+      }
+      const fp = path.join(EXCEL_BACKUPS_ROOT, safeFolder, safeFileName);
+      if (!fs.existsSync(fp)) {
+        return res.status(404).json({ error: 'Excel backup file not found' });
+      }
+      fs.unlinkSync(fp);
+      return res.json({ message: `Deleted backup file "${safeFileName}" permanently.` });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Failed to delete Excel backup file' });
     }
   });
 

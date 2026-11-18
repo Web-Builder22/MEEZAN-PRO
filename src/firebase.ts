@@ -24,37 +24,77 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Analytics if supported in the current environment
+// Initialize Analytics if supported and measurementId is configured
 export let analytics: Analytics | null = null;
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && Boolean((firebaseConfig as any).measurementId)) {
   isSupported().then((supported) => {
     if (supported) {
       analytics = getAnalytics(app);
-      console.log('Firebase Analytics initialized successfully.');
     }
   }).catch(() => {
     // Ignore unsupported environment gracefully
   });
 }
 
-// CRITICAL: Initialize Firestore with the provisioned database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore with the configured database ID if provided, otherwise use the default database
+const firestoreDatabaseId = (firebaseConfig as any).firestoreDatabaseId;
+export const isFirestoreConfigured =
+  typeof firestoreDatabaseId === 'string' && firestoreDatabaseId.trim().length > 0;
+export const db = isFirestoreConfigured
+  ? getFirestore(app, firestoreDatabaseId.trim())
+  : getFirestore(app);
 export const auth = getAuth(app);
 
+export const SCOPES = [
+  'https://www.googleapis.com/auth/drive.file'
+];
+
 export const googleProvider = new GoogleAuthProvider();
+SCOPES.forEach((scope) => googleProvider.addScope(scope));
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// Connection test on boot as required by Firebase Integration
+// In-memory cache for Google OAuth access token (never stored in localStorage/sessionStorage)
+let cachedGoogleAccessToken: string | null = null;
+let isConnectingGoogleDrive = false;
+
+onAuthStateChanged(auth, (user) => {
+  if (!user && !isConnectingGoogleDrive) {
+    cachedGoogleAccessToken = null;
+  }
+});
+
+export function getGoogleAccessToken(): string | null {
+  return cachedGoogleAccessToken;
+}
+
+export function setGoogleAccessToken(token: string | null): void {
+  cachedGoogleAccessToken = token;
+}
+
+export async function connectGoogleDriveAccount(): Promise<{ user: FirebaseUser; accessToken: string }> {
+  try {
+    isConnectingGoogleDrive = true;
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Failed to obtain Google Drive access token from Google Sign-In. Please grant permission and try again.');
+    }
+    cachedGoogleAccessToken = credential.accessToken;
+    return { user: result.user, accessToken: cachedGoogleAccessToken };
+  } finally {
+    isConnectingGoogleDrive = false;
+  }
+}
+
+// Non-blocking Firestore connectivity check on boot
 async function testConnection() {
+  if (!firestoreDatabaseId) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Successfully verified Firestore connectivity.');
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
+  } catch {
+    // Gracefully ignore when operating in local/Express SQLite ledger mode
   }
 }
 testConnection();
@@ -120,7 +160,7 @@ export function formatFirebaseAuthError(err: any): string {
     return `This sign-in provider is not enabled in your Firebase Project. Please enable it in Firebase Console (Authentication → Sign-in method), or sign in with Google directly.`;
   }
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-    return 'Google Sign-In popup was closed before completing.';
+    return 'Google Sign-In was cancelled because the popup window was closed. Please click "Continue with Google" again when you are ready to sign in.';
   }
   if (code === 'auth/popup-blocked') {
     return 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.';
@@ -150,6 +190,7 @@ export function formatFirebaseAuthError(err: any): string {
 }
 
 export {
+  GoogleAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,

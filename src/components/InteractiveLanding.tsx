@@ -2,21 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
   Users,
-  Wallet,
   TrendingUp,
   ShieldCheck,
   Download,
-  MessageSquare,
   Check,
   CheckCircle2,
-  Clock,
-  AlertCircle,
-  FileText,
   ChevronDown,
-  Lock,
   ArrowRight,
-  ArrowUpRight,
-  ArrowDownLeft,
   BarChart3,
   Layers,
   Store,
@@ -25,14 +17,20 @@ import {
   UserCheck,
   BellRing,
   X,
-  Plus,
-  Search
+  LayoutDashboard,
+  Phone,
+  Mail,
+  MapPin,
+  Send,
+  HelpCircle,
+  Shield,
+  Globe
 } from 'lucide-react';
 import LanguageToggle from './LanguageToggle';
 import ThemeToggle from './ThemeToggle';
 import { AuthScreenMode } from './AuthPages';
 import { BRAND, MeezanFlowLogo } from '../brand';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 interface InteractiveLandingProps {
   language: 'en' | 'ur';
@@ -56,14 +54,10 @@ export default function InteractiveLanding({
   // Sticky navbar scroll state
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Hero Dashboard Preview Interactive Filter State
-  const [previewFilter, setPreviewFilter] = useState<'all' | 'due' | 'paid'>('all');
-
-  // How It Works Interactive Step State
-  const [activeStep, setActiveStep] = useState<number>(0);
-
   // Benefits Interactive Audience Tab State
-  const [activeAudience, setActiveAudience] = useState<'shopkeepers' | 'smallbiz' | 'freelancers' | 'entrepreneurs'>('shopkeepers');
+  const [activeAudience, setActiveAudience] = useState<
+    'shopkeepers' | 'smallbiz' | 'freelancers' | 'entrepreneurs'
+  >('shopkeepers');
 
   // FAQ Accordion State
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(0);
@@ -79,6 +73,32 @@ export default function InteractiveLanding({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Smooth easing cubic-bezier(0.16, 1, 0.3, 1) with 0.6s transition duration
+  const smoothEase = [0.16, 1, 0.3, 1] as const;
+
+  // Contact / Help form state
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactSubject, setContactSubject] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
+  const [messageSuccess, setMessageSuccess] = useState(false);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactName.trim() || !contactMessage.trim()) return;
+    setIsSubmittingMessage(true);
+    setTimeout(() => {
+      setIsSubmittingMessage(false);
+      setMessageSuccess(true);
+      setContactName('');
+      setContactEmail('');
+      setContactSubject('');
+      setContactMessage('');
+      setTimeout(() => setMessageSuccess(false), 5000);
+    }, 600);
+  };
+
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -86,56 +106,56 @@ export default function InteractiveLanding({
     }
   };
 
-  // Features List (6 core capabilities required by specification)
+  // Consolidated Core Platform Capabilities (3x2 CSS Grid)
   const features = [
     {
       icon: BookOpen,
       title: language === 'en' ? 'Digital Khata & Ledger Management' : 'ڈیجیٹل کھاتا اور لیجر مینجمنٹ',
       description:
         language === 'en'
-          ? 'Maintain structured, error-free digital ledgers for every account. Every entry automatically updates running balances with complete audit history.'
-          : 'ہر گاہک اور کاروباری کھاتے کا منظم اور غلطی سے پاک ڈیجیٹل ریکارڈ رکھیں۔ ہر اندراج کے ساتھ بقایا رقم خودکار طریقے سے اپ ڈیٹ ہوتی ہے۔',
+          ? 'Maintain structured, error-free digital ledgers for every account with automatic running balance calculations and full audit logs.'
+          : 'ہر گاہک اور کاروباری کھاتے کا منظم اور غلطی سے پاک ڈیجیٹل ریکارڈ رکھیں جہاں بقایا رقم خودکار طریقے سے اپ ڈیٹ ہوتی ہے۔',
       detail: language === 'en' ? 'Auto-calculated running balances' : 'خودکار چلنے والا بیلنس'
     },
     {
       icon: Users,
-      title: language === 'en' ? 'Customer and Supplier Accounts' : 'کسٹمر اور سپلائر اکاؤنٹس',
+      title: language === 'en' ? 'Customer & Supplier Accounts' : 'کسٹمر اور سپلائر اکاؤنٹس',
       description:
         language === 'en'
-          ? 'Separate dedicated directories for customers and wholesale suppliers. Track who owes you and what you owe vendors from one unified workspace.'
+          ? 'Dedicated directories for customers and wholesale suppliers. Track who owes you and what you owe vendors from one unified workspace.'
           : 'گاہکوں اور ہول سیل سپلائرز کے لیے الگ الگ منظم کھاتے۔ ایک ہی جگہ سے واجب الادا اور واجب الوصول رقوم کا مکمل حساب رکھیں۔',
       detail: language === 'en' ? 'Unified receivables & payables' : 'وصولی اور ادائیگی کا مکمل ریکارڈ'
     },
     {
       icon: TrendingUp,
-      title: language === 'en' ? 'Credit and Debit Tracking' : 'کریڈٹ اور ڈیبٹ ٹریکنگ',
+      title: language === 'en' ? 'Credit & Debit Tracking' : 'کریڈٹ اور ڈیبٹ ٹریکنگ',
       description:
         language === 'en'
-          ? 'Record credit sales (Udhaar), cash collections, and partial settlements in seconds. Filter transactions by date, type, or outstanding status.'
+          ? 'Record credit sales (Udhaar), cash collections, and partial settlements in seconds. Filter transactions by date, type, or status.'
           : 'ادھار فروخت، نقد وصولی اور جزوی ادائیگیوں کا سیکنڈز میں اندراج کریں۔ تاریخ یا قسم کے لحاظ سے لین دین تلاش کریں۔',
       detail: language === 'en' ? 'Real-time double-entry logs' : 'فوری ڈبل انٹری حساب'
     },
     {
       icon: BellRing,
-      title: language === 'en' ? 'Payment History and Due Reminders' : 'ادائیگی کی ہسٹری اور یاد دہانی',
+      title: language === 'en' ? 'Payment History & Due Reminders' : 'ادائیگی کی ہسٹری اور یاد دہانی',
       description:
         language === 'en'
-          ? 'Send polite, formatted payment reminders via SMS or WhatsApp with a single click. Select multiple overdue accounts for unified bulk reminders.'
-          : 'ایک کلک کے ذریعے ایس ایم ایس یا واٹس ایپ پر بقایا رقم کی باوقار یاد دہانی بھیجیں۔ بقایا دار گاہکوں کو اجتماعی پیغام بھیجنے کی سہولت۔',
-      detail: language === 'en' ? 'Bulk SMS & WhatsApp dispatch' : 'بلک ایس ایم ایس اور واٹس ایپ'
+          ? 'Set promised payment dates and dispatch polite, formatted payment reminders via SMS or WhatsApp with a single click.'
+          : 'ایک کلک کے ذریعے ایس ایم ایس یا واٹس ایپ پر بقایا رقم کی باوقار یاد دہانی اور مکمل اسٹیٹمنٹ بھیجیں۔',
+      detail: language === 'en' ? '1-click SMS & WhatsApp dispatch' : 'ایس ایم ایس اور واٹس ایپ یاد دہانی'
     },
     {
       icon: BarChart3,
-      title: language === 'en' ? 'Business Analytics and Reports' : 'کاروباری تجزیات اور رپورٹس',
+      title: language === 'en' ? 'Invoicing, Inventory & Statements' : 'بلنگ، اسٹاک اور پی ڈی ایف اسٹیٹمنٹ',
       description:
         language === 'en'
-          ? 'Visualize monthly cash flow, daily counter cash-in/cash-out, inventory valuation, and printable PDF customer statements at any time.'
-          : 'ماہانہ کیش فلو، روزانہ کی نقد آمد وخرچ، اسٹاک کی مالیت اور پی ڈی ایف کھاتا اسٹیٹمنٹس کسی بھی وقت حاصل کریں۔',
-      detail: language === 'en' ? 'Exportable PDF & CSV statements' : 'پی ڈی ایف اور ایکسل رپورٹس'
+          ? 'Monitor daily counter cash-in/cash-out, track low-stock inventory items, and export printable PDF customer statements anytime.'
+          : 'روزانہ کی نقد آمد و خرچ، اسٹاک کی مالیت اور پی ڈی ایف کھاتا اسٹیٹمنٹس کسی بھی وقت حاصل کریں۔',
+      detail: language === 'en' ? 'Exportable PDF statements' : 'پرنٹ ایبل پی ڈی ایف رپورٹس'
     },
     {
       icon: ShieldCheck,
-      title: language === 'en' ? 'Secure Authentication and Account Protection' : 'محفوظ لاگ ان اور اکاؤنٹ کا تحفظ',
+      title: language === 'en' ? 'Secure Role Access & Cloud Backups' : 'محفوظ رسائی اور خودکار بیک اپ',
       description:
         language === 'en'
           ? 'Protected with Firebase Authentication, role-based access for Owners, Managers, and Staff, plus automatic pre-deletion backup checkpoints.'
@@ -144,49 +164,82 @@ export default function InteractiveLanding({
     }
   ];
 
-  // How It Works 3-step data
+  // Redesigned Workspace Initialization & Workflow Cards (matching clean feature card styling)
   const workflowSteps = [
     {
       number: '01',
-      title: language === 'en' ? 'Create your account' : 'اپنا اکاؤنٹ بنائیں',
+      icon: Layers,
+      badge: language === 'en' ? 'Workspace Initialization' : 'کاروباری پروفائل کی تیاری',
+      title: language === 'en' ? 'Initialize Your Business Workspace' : 'اپنا کاروباری اکاؤنٹ بنائیں',
       description:
         language === 'en'
-          ? 'Sign up with your email or Google account, set your business name, and configure role permissions for your store team.'
+          ? 'Sign up with email or Google, set your shop name, default currency (PKR), and role permissions for Owners, Managers, and Cashiers.'
           : 'اپنے ای میل یا گوگل اکاؤنٹ سے سائن اپ کریں، کاروبار کا نام درج کریں اور اپنے عملے کے اختیارات طے کریں۔',
-      previewTitle: language === 'en' ? 'Workspace Initialization' : 'کاروباری پروفائل کی تیاری',
-      previewRows: [
-        { label: language === 'en' ? 'Business Profile' : 'کاروبار کا نام', value: language === 'en' ? 'Your Business / Shop Name' : 'آپ کے کاروبار یا دکان کا نام', meta: 'Verified' },
-        { label: language === 'en' ? 'Primary Currency' : 'کرنسی', value: 'PKR (Pakistani Rupee)', meta: 'Default' },
-        { label: language === 'en' ? 'Access Control' : 'رسائی کا کنٹرول', value: 'Owner, Manager, Cashier', meta: 'Active' }
-      ]
+      specs: [
+        {
+          label: language === 'en' ? 'Business Profile' : 'کاروبار کا نام',
+          value: language === 'en' ? 'Verified Store Identity' : 'تصدیق شدہ کاروباری پروفائل'
+        },
+        {
+          label: language === 'en' ? 'Primary Currency' : 'بنیادی کرنسی',
+          value: 'PKR (Pakistani Rupee)'
+        },
+        {
+          label: language === 'en' ? 'Access Control' : 'رسائی کا کنٹرول',
+          value: language === 'en' ? 'Owner, Manager & Cashier' : 'مالک، مینیجر اور کیشیئر'
+        }
+      ],
+      detail: language === 'en' ? 'Ready in under 60 seconds' : 'صرف 60 سیکنڈ میں تیار'
     },
     {
       number: '02',
-      title: language === 'en' ? 'Add customers and record transactions' : 'گاہک شامل کریں اور لین دین درج کریں',
+      icon: Users,
+      badge: language === 'en' ? 'Instant Ledger Entry' : 'فوری کھاتا اندراج',
+      title: language === 'en' ? 'Add Customers & Log Transactions' : 'گاہک شامل کریں اور لین دین درج کریں',
       description:
         language === 'en'
-          ? 'Create customer or supplier profiles with phone numbers and log credit sales, cash receipts, or invoices with instant balance calculation.'
+          ? 'Create customer or supplier profiles with phone numbers and record credit sales, cash payments, or voice notes with instant balance updates.'
           : 'فون نمبر کے ساتھ گاہک یا سپلائر کا کھاتا کھولیں اور ادھار فروخت، نقد وصولی یا بل کا فوری اندراج کریں۔',
-      previewTitle: language === 'en' ? 'Instant Ledger Entry' : 'فوری کھاتا اندراج',
-      previewRows: [
-        { label: language === 'en' ? 'Customer Account' : 'گاہک کھاتا', value: language === 'en' ? 'Customer Name & Phone Number' : 'گاہک کا نام اور فون نمبر', meta: 'Directory' },
-        { label: language === 'en' ? 'Transaction Type' : 'لین دین کی قسم', value: language === 'en' ? 'Credit (Udhaar) or Debit (Payment)' : 'ادھار فروخت یا نقد وصولی', meta: 'Double-Entry' },
-        { label: language === 'en' ? 'Updated Balance' : 'نیا بیلنس', value: language === 'en' ? 'Automatic Running Balance' : 'خودکار چلنے والا بیلنس', meta: 'Real-Time' }
-      ]
+      specs: [
+        {
+          label: language === 'en' ? 'Party Directory' : 'گاہک کھاتا',
+          value: language === 'en' ? 'Customer & Supplier Folders' : 'گاہک اور سپلائر فولڈرز'
+        },
+        {
+          label: language === 'en' ? 'Entry Modes' : 'لین دین کی قسم',
+          value: language === 'en' ? 'Credit, Debit & Voice Notes' : 'ادھار، وصولی اور وائس نوٹ'
+        },
+        {
+          label: language === 'en' ? 'Ledger Math' : 'نیا بیلنس',
+          value: language === 'en' ? 'Automatic Running Balance' : 'خودکار چلنے والا بیلنس'
+        }
+      ],
+      detail: language === 'en' ? 'Zero manual calculation errors' : 'حساب کی غلطیوں سے پاک'
     },
     {
       number: '03',
-      title: language === 'en' ? 'Track balances and manage payments' : 'بقایا جات ٹریک کریں اور ادائیگیاں سنبھالیں',
+      icon: CheckCircle2,
+      badge: language === 'en' ? 'Receivables & Statements' : 'بقایا جات اور اسٹیٹمنٹ',
+      title: language === 'en' ? 'Track Balances & Collect Faster' : 'بقایا جات ٹریک کریں اور ادائیگیاں سنبھالیں',
       description:
         language === 'en'
-          ? 'Monitor total receivables on your live dashboard, dispatch SMS or WhatsApp due reminders, and download clean account statements.'
-          : 'ڈیش بورڈ پر کل واجب الادا رقم دیکھیں، ایس ایم ایس یا واٹس ایپ کے ذریعے یاد دہانی بھیجیں اور پی ڈی ایف اسٹیٹمنٹ ڈاؤن لوڈ کریں۔',
-      previewTitle: language === 'en' ? 'Receivables & Reminder Dispatch' : 'بقایا جات اور یاد دہانی',
-      previewRows: [
-        { label: language === 'en' ? 'Overdue Filter' : 'بقایا دار گاہک', value: language === 'en' ? 'Filter accounts with pending balances' : 'واجب الادا کھاتوں کی درجہ بندی', meta: 'Instant' },
-        { label: language === 'en' ? 'Reminder Channel' : 'یاد دہانی کا ذریعہ', value: 'Unified Bulk SMS & WhatsApp Link', meta: 'Ready' },
-        { label: language === 'en' ? 'Statement Export' : 'اسٹیٹمنٹ رپورٹ', value: 'PDF Ledger Report & JSON Backup', meta: '1-Click' }
-      ]
+          ? 'Monitor live receivables on your dashboard, send 1-click WhatsApp or SMS due reminders, and download clean PDF account statements.'
+          : 'ڈیش بورڈ پر کل واجب الادا رقم دیکھیں، واٹس ایپ یا ایس ایم ایس کے ذریعے یاد دہانی بھیجیں اور پی ڈی ایف اسٹیٹمنٹ ڈاؤن لوڈ کریں۔',
+      specs: [
+        {
+          label: language === 'en' ? 'Collection Alerts' : 'بقایا دار گاہک',
+          value: language === 'en' ? 'Overdue & Promised Date Tracking' : 'واجب الادا کھاتوں کی نشاندہی'
+        },
+        {
+          label: language === 'en' ? 'Reminder Channel' : 'یاد دہانی کا ذریعہ',
+          value: language === 'en' ? '1-Click WhatsApp & SMS Links' : 'فوری واٹس ایپ اور ایس ایم ایس'
+        },
+        {
+          label: language === 'en' ? 'Statement Export' : 'اسٹیٹمنٹ رپورٹ',
+          value: language === 'en' ? 'Printable PDF & JSON Backups' : 'پی ڈی ایف رپورٹ اور بیک اپ'
+        }
+      ],
+      detail: language === 'en' ? 'Faster payment recovery' : 'بقایا جات کی تیز تر وصولی'
     }
   ];
 
@@ -274,10 +327,10 @@ export default function InteractiveLanding({
           : 'نئے کاروباری مالکان کہیں سے بھی اپنے موبائل یا لیپ ٹاپ پر کاروبار کی مالی صورتحال، منافع اور کیش فلو کو انگریزی یا اردو میں دیکھ سکتے ہیں۔',
       points: [
         language === 'en'
-          ? '6-month revenue vs. expense trend analytics for informed purchasing decisions'
-          : 'بہتر کاروباری فیصلوں کے لیے 6 ماہ کی آمدنی اور اخراجات کا موازنہ',
+          ? 'Real-time revenue vs. expense visibility for informed purchasing decisions'
+          : 'بہتر کاروباری فیصلوں کے لیے آمدنی اور اخراجات کا واضح موازنہ',
         language === 'en'
-          ? 'One-click JSON & CSV exports for external tax filing or offline archiving'
+          ? 'One-click JSON & PDF exports for external tax filing or offline archiving'
           : 'ٹیکس یا آف لائن ریکارڈ کے لیے ایک کلک میں ڈیٹا ایکسپورٹ کریں',
         language === 'en'
           ? 'Installable Progressive Web App (PWA) for fast access on any phone or laptop'
@@ -289,34 +342,54 @@ export default function InteractiveLanding({
   // FAQ Items
   const faqItems = [
     {
-      q: language === 'en' ? `How do I create an account and get started with ${BRAND.name}?` : `${BRAND.name} پر اکاؤنٹ کیسے بنایا جائے اور شروعات کیسے کریں؟`,
-      a: language === 'en'
-        ? 'Click "Get Started Free" in the navigation bar to create your business account using your email address and password, or sign in with Google in one click. Once signed in, you can immediately add customers, suppliers, and transactions.'
-        : 'نیویگیشن بار میں "Get Started Free" پر کلک کریں اور اپنے ای میل یا گوگل اکاؤنٹ کے ذریعے سائن اپ کریں۔ اکاؤنٹ بنتے ہی آپ فوری طور پر گاہک، سپلائر اور لین دین شامل کر سکتے ہیں۔'
+      q:
+        language === 'en'
+          ? `How do I create an account and get started with ${BRAND.name}?`
+          : `${BRAND.name} پر اکاؤنٹ کیسے بنایا جائے اور شروعات کیسے کریں؟`,
+      a:
+        language === 'en'
+          ? 'Click "Get Started" in the navigation bar to create your business account using your email address and password, or sign in with Google in one click. Once signed in, you can immediately add customers, suppliers, and transactions.'
+          : 'نیویگیشن بار میں "Get Started" پر کلک کریں اور اپنے ای میل یا گوگل اکاؤنٹ کے ذریعے سائن اپ کریں۔ اکاؤنٹ بنتے ہی آپ فوری طور پر گاہک، سپلائر اور لین دین شامل کر سکتے ہیں۔'
     },
     {
-      q: language === 'en' ? 'How is my business and financial data kept secure?' : 'میرے کاروبار اور کھاتوں کا ڈیٹا کس طرح محفوظ رہتا ہے؟',
-      a: language === 'en'
-        ? `${BRAND.name} uses Firebase Authentication and strict access rules so only authorized users can access your workspace. Additionally, the built-in Safety & Backup Hub automatically creates a restore snapshot before any deletion and allows manual JSON backup downloads anytime.`
-        : `${BRAND.name} فائر بیس سیکیورٹی اور سخت رسائی کے اصول استعمال کرتا ہے۔ اس کے علاوہ کسی بھی ریکارڈ کو حذف کرنے سے پہلے خودکار بیک اپ بنتا ہے اور آپ کسی بھی وقت مکمل بیک اپ فائل اپنے پاس ڈاؤن لوڈ بھی کر سکتے ہیں۔`
+      q:
+        language === 'en'
+          ? 'How is my business and financial data kept secure?'
+          : 'میرے کاروبار اور کھاتوں کا ڈیٹا کس طرح محفوظ رہتا ہے؟',
+      a:
+        language === 'en'
+          ? `${BRAND.name} uses Firebase Authentication and strict access rules so only authorized users can access your workspace. Additionally, the built-in Safety & Backup Hub automatically creates a restore snapshot before any deletion and allows manual JSON backup downloads anytime.`
+          : `${BRAND.name} فائر بیس سیکیورٹی اور سخت رسائی کے اصول استعمال کرتا ہے۔ اس کے علاوہ کسی بھی ریکارڈ کو حذف کرنے سے پہلے خودکار بیک اپ بنتا ہے اور آپ کسی بھی وقت مکمل بیک اپ فائل اپنے پاس ڈاؤن لوڈ بھی کر سکتے ہیں۔`
     },
     {
-      q: language === 'en' ? 'How do I record customer credit (Udhaar) and payments?' : 'گاہک کا ادھار اور وصول شدہ رقم کیسے درج کی جاتی ہے؟',
-      a: language === 'en'
-        ? `Open the Customers tab, select or add a customer folder, and log either a Credit (Udhaar given) or Payment (Debit received) entry. ${BRAND.name} automatically calculates the updated running balance and reflects it across your dashboard receivables.`
-        : 'کسٹمرز ٹیب میں جا کر گاہک کا فولڈر منتخب کریں اور ادھار (Credit) یا وصولی (Payment) کی رقم درج کریں۔ سسٹم خودکار طریقے سے نیا بقایا بیلنس اپ ڈیٹ کر دے گا۔'
+      q:
+        language === 'en'
+          ? 'How do I record customer credit (Udhaar) and payments?'
+          : 'گاہک کا ادھار اور وصول شدہ رقم کیسے درج کی جاتی ہے؟',
+      a:
+        language === 'en'
+          ? `Open the Customers tab, select or add a customer folder, and log either a Credit (Udhaar given) or Payment (Debit received) entry. ${BRAND.name} automatically calculates the updated running balance and reflects it across your dashboard receivables.`
+          : 'کسٹمرز ٹیب میں جا کر گاہک کا فولڈر منتخب کریں اور ادھار (Credit) یا وصولی (Payment) کی رقم درج کریں۔ سسٹم خودکار طریقے سے نیا بقایا بیلنس اپ ڈیٹ کر دے گا۔'
     },
     {
-      q: language === 'en' ? 'Can I send payment reminders and statements to customers?' : 'کیا میں بقایا دار گاہکوں کو ادائیگی کی یاد دہانی اور اسٹیٹمنٹ بھیج سکتا ہوں؟',
-      a: language === 'en'
-        ? 'Yes. Inside each customer folder, you can send formatted WhatsApp or SMS statements and reminders using that customer’s verified transaction records.'
-        : 'جی ہاں! آپ کسی بھی گاہک کے فولڈر سے انفرادی طور پر واٹس ایپ یا ایس ایم ایس کے ذریعے مکمل اسٹیٹمنٹ اور یاد دہانی بھیج سکتے ہیں۔'
+      q:
+        language === 'en'
+          ? 'Can I send payment reminders and statements to customers?'
+          : 'کیا میں بقایا دار گاہکوں کو ادائیگی کی یاد دہانی اور اسٹیٹمنٹ بھیج سکتا ہوں؟',
+      a:
+        language === 'en'
+          ? 'Yes. Inside each customer folder, you can send formatted WhatsApp or SMS statements and reminders using that customer’s verified transaction records.'
+          : 'جی ہاں! آپ کسی بھی گاہک کے فولڈر سے انفرادی طور پر واٹس ایپ یا ایس ایم ایس کے ذریعے مکمل اسٹیٹمنٹ اور یاد دہانی بھیج سکتے ہیں۔'
     },
     {
-      q: language === 'en' ? 'Can my shop manager or cashier use the app with restricted permissions?' : 'کیا دکان کا مینیجر یا کیشیئر محدود اختیارات کے ساتھ ایپ استعمال کر سکتا ہے؟',
-      a: language === 'en'
-        ? `Yes. ${BRAND.name} supports three distinct roles: Owner (full analytics, backups, and deletion rights), Manager (inventory, billing, and ledger management), and Employee (daily transaction and cash book entry without destructive permissions).`
-        : `جی بالکل۔ ${BRAND.name} میں تین درجے موجود ہیں: مالک (مکمل کنٹرول اور بیک اپ)، مینیجر (اسٹاک اور بلنگ)، اور ملازم (صرف روزانہ کا اندراج، ریکارڈ ڈیلیٹ کرنے کی اجازت کے بغیر)۔`
+      q:
+        language === 'en'
+          ? 'Can my shop manager or cashier use the app with restricted permissions?'
+          : 'کیا دکان کا مینیجر یا کیشیئر محدود اختیارات کے ساتھ ایپ استعمال کر سکتا ہے؟',
+      a:
+        language === 'en'
+          ? `Yes. ${BRAND.name} supports three distinct roles: Owner (full analytics, backups, and deletion rights), Manager (inventory, billing, and ledger management), and Employee (daily transaction and cash book entry without destructive permissions).`
+          : `جی بالکل۔ ${BRAND.name} میں تین درجے موجود ہیں: مالک (مکمل کنٹرول اور بیک اپ)، مینیجر (اسٹاک اور بلنگ)، اور ملازم (صرف روزانہ کا اندراج، ریکارڈ ڈیلیٹ کرنے کی اجازت کے بغیر)۔`
     }
   ];
 
@@ -324,13 +397,13 @@ export default function InteractiveLanding({
   const AudienceIcon = currentAudience.icon;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#FAF9F6] dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 font-sans selection:bg-[#064E3B] selection:text-[#D4AF37]">
+    <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 font-sans selection:bg-[#064E3B] selection:text-[#D4AF37]">
       {/* 1. STICKY NAVBAR */}
       <header
         className={`sticky top-0 z-50 transition-all duration-200 px-4 sm:px-8 ${
           isScrolled
             ? 'bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800 shadow-2xs'
-            : 'bg-[#FAF9F6]/85 dark:bg-zinc-950/85 backdrop-blur-xs border-b border-slate-200/50 dark:border-zinc-800/60'
+            : 'bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xs border-b border-slate-200/60 dark:border-zinc-800/60'
         }`}
       >
         <div className="max-w-7xl mx-auto h-16 flex items-center justify-between gap-8">
@@ -355,7 +428,7 @@ export default function InteractiveLanding({
           </a>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-7 text-xs sm:text-sm font-semibold text-slate-600 dark:text-zinc-300">
+          <nav className="hidden md:flex items-center gap-7 text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300">
             <button
               type="button"
               onClick={() => scrollToSection('features')}
@@ -384,6 +457,13 @@ export default function InteractiveLanding({
             >
               {language === 'en' ? 'FAQ' : 'سوالات'}
             </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection('support')}
+              className="hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer whitespace-nowrap"
+            >
+              {language === 'en' ? 'Support' : 'مدد و رابطہ'}
+            </button>
           </nav>
 
           {/* Actions Zone */}
@@ -403,7 +483,7 @@ export default function InteractiveLanding({
             <button
               type="button"
               onClick={() => onOpenAuth('login')}
-              className="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap"
+              className="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-800 dark:text-zinc-200 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap"
             >
               {language === 'en' ? 'Login' : 'لاگ ان'}
             </button>
@@ -418,8 +498,8 @@ export default function InteractiveLanding({
         </div>
       </header>
 
-      {/* 2. HERO SECTION WITH AMBIENT FLOATING SHAPES & FRAMER MOTION */}
-      <section id="top" className="relative pt-12 pb-20 lg:pt-16 lg:pb-24 px-4 sm:px-8 overflow-hidden">
+      {/* 2. HERO SECTION */}
+      <section id="top" className="relative pt-12 pb-16 lg:pt-16 lg:pb-20 px-4 sm:px-8 overflow-hidden bg-white dark:bg-zinc-950">
         {/* Subtle architectural grid background */}
         <div
           aria-hidden="true"
@@ -441,7 +521,7 @@ export default function InteractiveLanding({
         />
 
         <div className="relative max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
-          {/* Left Column: Headline & Primary CTAs */}
+          {/* Left Column: Headline, Single Punchy High-Contrast Sentence & Primary CTAs */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -470,10 +550,11 @@ export default function InteractiveLanding({
               )}
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-600 dark:text-zinc-300 leading-relaxed max-w-xl">
+            {/* Single punchy sentence with larger font size and high contrast */}
+            <p className="text-lg sm:text-xl font-semibold text-slate-800 dark:text-zinc-100 leading-relaxed max-w-xl">
               {language === 'en'
-                ? `${BRAND.name} brings precision customer account management, credit & debit ledgers, promised payment reminders, and printable PDF statements into one refined fintech workspace.`
-                : `${BRAND.name} کے ساتھ ادھار کا حساب رکھیں، ادائیگیاں ٹریک کریں، گاہکوں کے فولڈرز منظم کریں اور اپنے کاروبار کو وسعت دیں۔`}
+                ? 'Manage customer ledgers, automate credit and debit tracking, and send instant WhatsApp statements from one intelligent workspace.'
+                : 'ایک ہی جدید پلیٹ فارم سے گاہکوں کے کھاتے، ادھار و وصولی اور واٹس ایپ اسٹیٹمنٹس کو مکمل درستگی کے ساتھ منظم کریں۔'}
             </p>
 
             {/* Primary & Secondary CTAs */}
@@ -483,7 +564,7 @@ export default function InteractiveLanding({
                 whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => onOpenAuth('signup')}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-meezan-btn text-white font-bold text-sm shadow-md transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-meezan-btn text-white font-bold text-sm sm:text-base shadow-md transition-all cursor-pointer whitespace-nowrap"
               >
                 <span>{language === 'en' ? 'Get Started' : 'مفت اکاؤنٹ بنائیں'}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -494,14 +575,14 @@ export default function InteractiveLanding({
                 whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => onOpenAuth('login')}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-semibold text-sm transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-900 dark:text-zinc-100 font-bold text-sm sm:text-base transition-all cursor-pointer whitespace-nowrap"
               >
                 <span>{language === 'en' ? 'Login to Account' : 'لاگ ان کریں'}</span>
               </motion.button>
             </div>
 
             {/* Quiet Unboxed Metadata */}
-            <div className="pt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500 dark:text-zinc-400">
+            <div className="pt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold text-slate-600 dark:text-zinc-300">
               <span>{language === 'en' ? 'Cloud-synced ledgers' : 'کلاؤڈ بیک اپ'}</span>
               <span aria-hidden="true">·</span>
               <span>{language === 'en' ? 'WhatsApp PDF statements' : 'واٹس ایپ پی ڈی ایف رپورٹ'}</span>
@@ -529,252 +610,234 @@ export default function InteractiveLanding({
         </div>
       </section>
 
-      {/* 3. TRUST SECTION */}
-      <section className="py-12 px-4 sm:px-8 bg-white dark:bg-zinc-900 border-y border-slate-200/80 dark:border-zinc-800">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
-              <BookOpen className="h-5 w-5" />
+      {/* 4. CONSOLIDATED CORE PLATFORM CAPABILITIES SECTION (3x2 CSS Grid) */}
+      <section
+        id="features"
+        className="py-20 lg:py-24 px-4 sm:px-8 bg-[#FAF9F6] dark:bg-zinc-900/50 border-t border-slate-200/80 dark:border-zinc-800"
+      >
+        <div className="max-w-7xl mx-auto">
+          {/* Section Heading with Smooth Scroll-Triggered Entrance */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.6, ease: smoothEase }}
+            className="max-w-2xl text-left mb-12 space-y-3"
+          >
+            <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
+              {language === 'en' ? 'Core Platform Capabilities' : 'پلیٹ فارم کی بنیادی خصوصیات'}
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {language === 'en' ? 'Easy Record Keeping' : 'آسان اور منظم حساب کتاب'}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 mt-1 leading-relaxed">
-                {language === 'en'
-                  ? 'Log credit sales, cash payments, and supplier bills in a structured ledger with automatic running balance calculations.'
-                  : 'ادھار فروخت، نقد وصولی اور سپلائر بلوں کو منظم کھاتے میں درج کریں جہاں بقایا رقم خودکار طریقے سے اپ ڈیٹ ہوتی ہے۔'}
-              </p>
-            </div>
-          </div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight text-balance">
+              {language === 'en'
+                ? 'Everything you need to run a balanced financial workflow'
+                : 'مکمل اور شفاف کاروباری حساب کتاب چلانے کے لیے تمام ضروری فیچرز'}
+            </h2>
+            <p className="text-sm sm:text-base font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
+              {language === 'en'
+                ? 'Purpose-built financial tools that keep your customer receivables, supplier payables, and daily cash drawer accurate.'
+                : 'ایسے مالیاتی ٹولز جو آپ کے گاہکوں کے بقایا جات، سپلائرز کی ادائیگیوں اور روزانہ کی نقد رقم کو ہمیشہ درست رکھتے ہیں۔'}
+            </p>
+          </motion.div>
 
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
-              <Lock className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {language === 'en' ? 'Secure Account Access' : 'محفوظ اکاؤنٹ رسائی'}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 mt-1 leading-relaxed">
-                {language === 'en'
-                  ? 'Authenticated workspaces with granular Owner, Manager, and Staff permissions and automated pre-deletion backup checkpoints.'
-                  : 'فائر بیس سیکیورٹی، مالک اور عملے کے الگ اختیارات اور ڈیٹا ڈیلیٹ ہونے سے پہلے خودکار بیک اپ کی سہولت۔'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-[#D4AF37]/15 border border-emerald-200/80 dark:border-[#D4AF37]/30 flex items-center justify-center text-[#064E3B] dark:text-[#D4AF37] shrink-0">
-              <MessageSquare className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {language === 'en' ? 'Smarter Payment Tracking' : 'ادائیگیوں کی بہتر نگرانی'}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 mt-1 leading-relaxed">
-                {language === 'en'
-                  ? 'Set promised payment dates, track overdue balances, and dispatch bulk WhatsApp or SMS statements in seconds.'
-                  : 'واجب الادا رقوم کی فوری نشاندہی کریں اور سیکنڈز میں واٹس ایپ یا ایس ایم ایس کے ذریعے یاد دہانی بھیجیں۔'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. FEATURES SECTION */}
-      <section id="features" className="py-20 lg:py-24 px-4 sm:px-8 max-w-7xl mx-auto">
-        <div className="max-w-2xl text-left mb-12 space-y-3">
-          <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
-            {language === 'en' ? 'Core Platform Capabilities' : 'پلیٹ فارم کی بنیادی خصوصیات'}
-          </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
-            {language === 'en'
-              ? `Everything you need to run a balanced financial workflow`
-              : 'مکمل اور شفاف کاروباری حساب کتاب چلانے کے لیے تمام ضروری فیچرز'}
-          </h2>
-          <p className="text-sm sm:text-base text-slate-600 dark:text-zinc-400 leading-relaxed">
-            {language === 'en'
-              ? 'Purpose-built financial tools that keep your customer receivables, supplier payables, and daily cash drawer accurate.'
-              : 'ایسے مالیاتی ٹولز جو آپ کے گاہکوں کے بقایا جات، سپلائرز کی ادائیگیوں اور روزانہ کی نقد رقم کو ہمیشہ درست رکھتے ہیں۔'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-          {features.map((feat, idx) => {
-            const Icon = feat.icon;
-            return (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.35, delay: idx * 0.05 }}
-                whileHover={{ y: -4 }}
-                className="group bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between hover:border-[#059669]/50 dark:hover:border-[#D4AF37]/50 hover:shadow-md transition-all duration-150"
-              >
-                <div className="space-y-4">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-zinc-800 group-hover:bg-[#064E3B] dark:group-hover:bg-[#D4AF37]/20 text-[#064E3B] dark:text-zinc-200 group-hover:text-[#D4AF37] dark:group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
-                    <Icon className="h-5 w-5" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
+            {features.map((feat, idx) => {
+              const Icon = feat.icon;
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-30px' }}
+                  transition={{ duration: 0.6, delay: idx * 0.12, ease: smoothEase }}
+                  whileHover={{ y: -4 }}
+                  className="interactive-card group bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs cursor-pointer"
+                >
+                  <div className="space-y-4">
+                    <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-zinc-800 group-hover:bg-[#064E3B] dark:group-hover:bg-[#D4AF37]/20 text-[#064E3B] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                      {feat.title}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
+                      {feat.description}
+                    </p>
                   </div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-                    {feat.title}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
-                    {feat.description}
-                  </p>
-                </div>
 
-                <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs font-medium text-slate-500 dark:text-zinc-400">
-                  <span>{feat.detail}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-[#059669] dark:group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
-                </div>
-              </motion.div>
-            );
-          })}
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs font-bold text-[#064E3B] dark:text-emerald-400">
+                    <span>{feat.detail}</span>
+                    <ArrowRight className="h-4 w-4 text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      {/* 5. HOW IT WORKS SECTION */}
+      {/* 5. MID-PAGE CALL-TO-ACTION BANNER (Right after Features section) */}
+      <section className="py-12 sm:py-16 px-4 sm:px-8 bg-white dark:bg-zinc-950">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-meezan-header text-white rounded-3xl border border-emerald-700/40 p-8 sm:p-10 lg:p-12 shadow-lg flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+            <div className="space-y-2 text-left max-w-2xl">
+              <span className="inline-block text-xs font-extrabold uppercase tracking-wider text-[#D4AF37]">
+                {language === 'en' ? 'Start Your Digital Ledger Today' : 'آج ہی اپنا ڈیجیٹل کھاتا شروع کریں'}
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                {language === 'en'
+                  ? 'Ready to balance your business accounts?'
+                  : 'کیا آپ اپنے کاروباری حساب کتاب کو متوازن بنانے کے لیے تیار ہیں؟'}
+              </h2>
+              <p className="text-sm sm:text-base text-emerald-100 font-medium leading-relaxed">
+                {language === 'en'
+                  ? 'Join shopkeepers, wholesalers, and business owners managing every rupee with zero paperwork.'
+                  : 'ہزاروں دکانداروں اور تاجروں کی طرح اپنے کاروبار کے ہر روپے کا حساب مکمل اعتماد سے رکھیں۔'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => onOpenAuth('signup')}
+                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-[#042F24] font-extrabold text-sm sm:text-base shadow-sm transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span>{language === 'en' ? 'Get Started' : 'مفت اکاؤنٹ بنائیں'}</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenAuth('login')}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-emerald-500/50 bg-emerald-950/50 hover:bg-emerald-900/60 text-white font-bold text-sm sm:text-base transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span>{language === 'en' ? 'Login' : 'لاگ ان کریں'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. WORKSPACE INITIALIZATION & HOW IT WORKS (Redesigned to strictly match clean feature card layout) */}
       <section
         id="how-it-works"
         className="py-20 lg:py-24 px-4 sm:px-8 bg-white dark:bg-zinc-900 border-y border-slate-200/80 dark:border-zinc-800"
       >
         <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl text-left mb-12 space-y-3">
-            <div className="text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
-              {language === 'en' ? 'How It Works' : 'یہ کیسے کام کرتا ہے'}
+          {/* Section Heading with Smooth Scroll-Triggered Entrance */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.6, ease: smoothEase }}
+            className="max-w-2xl text-left mb-12 space-y-3"
+          >
+            <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
+              {language === 'en' ? 'Workspace Initialization & Setup' : 'کاروباری پروفائل اور طریقہ کار'}
             </div>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight text-balance">
               {language === 'en'
                 ? 'Three simple steps from paper registers to structured digital accounts'
                 : 'کاغذی رجسٹر سے جدید ڈیجیٹل کھاتے تک صرف تین آسان مراحل'}
             </h2>
-          </div>
+            <p className="text-sm sm:text-base font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
+              {language === 'en'
+                ? 'Set up your Workspace Initialization, add customer folders, and start tracking balances in minutes.'
+                : 'منٹوں میں اپنا کاروباری پروفائل تیار کریں، گاہک فولڈرز بنائیں اور بقایا جات ٹریک کریں۔'}
+            </p>
+          </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-            {/* Left: 3 Selectable Steps */}
-            <div className="lg:col-span-6 space-y-4 text-left">
-              {workflowSteps.map((step, index) => {
-                const isSelected = activeStep === index;
-                return (
-                  <button
-                    key={step.number}
-                    type="button"
-                    onClick={() => setActiveStep(index)}
-                    className={`w-full text-left p-5 sm:p-6 rounded-2xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#F8FAFC] dark:bg-zinc-950 border-[#0B192C] dark:border-[#D4AF37] shadow-2xs'
-                        : 'bg-white dark:bg-zinc-900 border-slate-200/90 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <span
-                        className={`font-mono text-xs font-bold px-2.5 py-1 rounded-md tabular-nums ${
-                          isSelected
-                            ? 'bg-[#0B192C] text-[#D4AF37]'
-                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
-                        }`}
-                      >
-                        {step.number}
-                      </span>
-                      <div className="space-y-1.5">
-                        <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                          {step.title}
-                        </h3>
-                        <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
-                          {step.description}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Right: Live Step Visual Preview */}
-            <div className="lg:col-span-6 bg-[#F8FAFC] dark:bg-zinc-950 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8 text-left space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-zinc-800 pb-4">
-                <div>
-                  <span className="text-xs font-mono font-semibold text-[#0B192C] dark:text-[#D4AF37]">
-                    Step {workflowSteps[activeStep].number}
-                  </span>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
-                    {workflowSteps[activeStep].previewTitle}
-                  </h3>
-                </div>
-                <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
-                  {BRAND.name}
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {workflowSteps[activeStep].previewRows.map((row, rIdx) => (
-                  <div
-                    key={rIdx}
-                    className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 flex items-center justify-between gap-4"
-                  >
-                    <div>
-                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">{row.label}</div>
-                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white mt-0.5">
-                        {row.value}
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-semibold text-[#0B192C] dark:text-[#D4AF37] tabular-nums shrink-0">
-                      {row.meta}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-2 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-1.5">
-                  {[0, 1, 2].map((dot) => (
-                    <button
-                      key={dot}
-                      type="button"
-                      onClick={() => setActiveStep(dot)}
-                      aria-label={`View step ${dot + 1}`}
-                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                        activeStep === dot
-                          ? 'w-6 bg-[#0B192C] dark:bg-[#D4AF37]'
-                          : 'w-2 bg-slate-300 dark:bg-zinc-700'
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => onOpenAuth('signup')}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37] hover:underline cursor-pointer"
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+            {workflowSteps.map((step, index) => {
+              const StepIcon = step.icon;
+              return (
+                <motion.div
+                  key={step.number}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-30px' }}
+                  transition={{ duration: 0.6, delay: index * 0.12, ease: smoothEase }}
+                  whileHover={{ y: -4 }}
+                  className="interactive-card group bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs cursor-pointer"
                 >
-                  <span>{language === 'en' ? 'Start Step 01 Free' : 'پہلا مرحلہ مفت شروع کریں'}</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-zinc-800 group-hover:bg-[#064E3B] dark:group-hover:bg-[#D4AF37]/20 text-[#064E3B] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
+                        <StepIcon className="h-5 w-5" />
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                        <span>Step {step.number}</span>
+                        <span>·</span>
+                        <span>{step.badge}</span>
+                      </span>
+                    </div>
+
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                      {step.title}
+                    </h3>
+
+                    <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
+                      {step.description}
+                    </p>
+
+                    <div className="pt-2 space-y-2">
+                      {step.specs.map((spec, sIdx) => (
+                        <div
+                          key={sIdx}
+                          className="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/70 dark:border-zinc-800 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <span className="font-semibold text-slate-500 dark:text-zinc-400">
+                            {spec.label}
+                          </span>
+                          <span className="font-bold text-slate-900 dark:text-white text-right">
+                            {spec.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#064E3B] dark:text-emerald-400">
+                      {step.detail}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuth('signup')}
+                      className="inline-flex items-center gap-1 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] hover:underline cursor-pointer"
+                    >
+                      <span>{language === 'en' ? 'Get Started' : 'شروع کریں'}</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* 6. BENEFITS SECTION */}
+      {/* 7. BENEFITS SECTION */}
       <section id="benefits" className="py-20 lg:py-24 px-4 sm:px-8 max-w-7xl mx-auto">
-        <div className="max-w-2xl text-left mb-10 space-y-3">
-          <div className="text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-50px' }}
+          transition={{ duration: 0.6, ease: smoothEase }}
+          className="max-w-2xl text-left mb-10 space-y-3"
+        >
+          <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
             {language === 'en' ? 'Designed for Modern Businesses' : 'پاکستانی کاروباروں کی ضرورت کے مطابق'}
           </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight text-balance">
             {language === 'en'
               ? 'Built for shopkeepers, wholesalers, small businesses, and independent owners'
               : 'دکانداروں، چھوٹے کاروباروں، ہول سیلرز اور تاجروں کے لیے یکساں مفید'}
           </h2>
-          <p className="text-sm sm:text-base text-slate-600 dark:text-zinc-400 leading-relaxed">
+          <p className="text-sm sm:text-base font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
             {language === 'en'
               ? 'Reduce manual bookkeeping overhead, eliminate calculation mistakes, and keep every account statement ready at a moment’s notice.'
               : 'دفتری کاغذی کارروائی کم کریں، حساب کی غلطیوں کا خاتمہ کریں اور ہر گاہک کا کھاتا ہمیشہ تیار رکھیں۔'}
           </p>
-        </div>
+        </motion.div>
 
         {/* Interactive Audience Selector Tabs */}
         <div className="flex flex-wrap items-center gap-2 mb-8">
@@ -790,10 +853,10 @@ export default function InteractiveLanding({
               key={tab.id}
               type="button"
               onClick={() => setActiveAudience(tab.id)}
-              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer border whitespace-nowrap ${
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border whitespace-nowrap ${
                 activeAudience === tab.id
-                  ? 'bg-[#0B192C] text-white border-[#0B192C] dark:bg-[#D4AF37] dark:text-[#0B192C] dark:border-[#D4AF37] shadow-2xs'
-                  : 'bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                  ? 'bg-[#064E3B] text-white border-[#064E3B] dark:bg-[#D4AF37] dark:text-[#042F24] dark:border-[#D4AF37] shadow-2xs'
+                  : 'bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:border-[#059669]/50'
               }`}
             >
               {tab.label}
@@ -803,28 +866,28 @@ export default function InteractiveLanding({
 
         {/* Selected Audience Benefit Detail + Operational Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch text-left">
-          <div className="lg:col-span-7 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between">
+          <div className="lg:col-span-7 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between shadow-2xs">
             <div className="space-y-5">
-              <div className="inline-flex items-center gap-2.5 text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
+              <div className="inline-flex items-center gap-2.5 text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
                 <AudienceIcon className="h-4 w-4" />
                 <span>{currentAudience.label}</span>
               </div>
 
-              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 {currentAudience.headline}
               </h3>
 
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
+              <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
                 {currentAudience.description}
               </p>
 
               <div className="space-y-3 pt-2">
                 {currentAudience.points.map((pt, i) => (
                   <div key={i} className="flex items-start gap-3">
-                    <div className="h-5 w-5 rounded-full bg-[#0B192C]/10 dark:bg-[#D4AF37]/20 text-[#0B192C] dark:text-[#D4AF37] flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="h-3 w-3" />
+                    <div className="h-5 w-5 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-[#064E3B] dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="h-3 w-3 stroke-[2.5]" />
                     </div>
-                    <span className="text-xs sm:text-sm text-slate-700 dark:text-zinc-300 font-medium">
+                    <span className="text-sm text-slate-800 dark:text-zinc-200 font-semibold">
                       {pt}
                     </span>
                   </div>
@@ -833,13 +896,13 @@ export default function InteractiveLanding({
             </div>
 
             <div className="pt-6 mt-6 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-zinc-400">
+              <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
                 {language === 'en' ? 'Ready for desktop & mobile browsers' : 'موبائل اور کمپیوٹر دونوں پر دستیاب'}
               </span>
               <button
                 type="button"
                 onClick={() => onOpenAuth('signup')}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] hover:underline cursor-pointer"
               >
                 <span>{language === 'en' ? `Start with ${BRAND.name}` : 'اپنا اکاؤنٹ بنائیں'}</span>
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -848,15 +911,15 @@ export default function InteractiveLanding({
           </div>
 
           {/* Right Column: Manual Bookkeeping vs. MeezanFlow Comparison */}
-          <div className="lg:col-span-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between">
+          <div className="lg:col-span-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between shadow-2xs">
             <div className="space-y-4">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
                 {language === 'en'
                   ? 'Why businesses switch from paper registers'
                   : `کاغذی رجسٹر کے مقابلے میں ${BRAND.name} کے فوائد`}
               </h3>
 
-              <div className="divide-y divide-slate-200/70 dark:divide-zinc-800 text-xs">
+              <div className="divide-y divide-slate-200/70 dark:divide-zinc-800 text-xs sm:text-sm">
                 {[
                   {
                     aspect: language === 'en' ? 'Balance Calculation' : 'بیلنس کا حساب',
@@ -880,16 +943,16 @@ export default function InteractiveLanding({
                   }
                 ].map((cmp, idx) => (
                   <div key={idx} className="py-3.5 space-y-1.5">
-                    <div className="font-bold text-slate-900 dark:text-white">{cmp.aspect}</div>
+                    <div className="font-extrabold text-slate-900 dark:text-white">{cmp.aspect}</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="text-slate-500 dark:text-zinc-400">
-                        <span className="block text-[10px] text-slate-400">
+                        <span className="block text-[10px] uppercase font-bold text-slate-400">
                           {language === 'en' ? 'Paper Register' : 'کاغذی رجسٹر'}
                         </span>
                         {cmp.manual}
                       </div>
-                      <div className="text-[#0B192C] dark:text-[#D4AF37] font-semibold">
-                        <span className="block text-[10px] text-[#0B192C]/70 dark:text-[#D4AF37]/80">
+                      <div className="text-[#064E3B] dark:text-emerald-400 font-bold">
+                        <span className="block text-[10px] uppercase font-extrabold text-[#059669] dark:text-[#D4AF37]">
                           {BRAND.name}
                         </span>
                         {cmp.digital}
@@ -903,22 +966,28 @@ export default function InteractiveLanding({
         </div>
       </section>
 
-      {/* 7. FAQ SECTION */}
+      {/* 8. FAQ SECTION */}
       <section
         id="faq"
-        className="py-20 lg:py-24 px-4 sm:px-8 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800"
+        className="py-20 lg:py-24 px-4 sm:px-8 bg-[#FAF9F6] dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800"
       >
         <div className="max-w-4xl mx-auto">
-          <div className="text-left mb-10 space-y-3">
-            <div className="text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.6, ease: smoothEase }}
+            className="text-left mb-10 space-y-3"
+          >
+            <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
               {language === 'en' ? 'Frequently Asked Questions' : 'عام پوچھے جانے والے سوالات'}
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {language === 'en'
                 ? `Answers to common questions about ${BRAND.name}`
                 : `${BRAND.name} کے بارے میں اہم سوالات کے جوابات`}
             </h2>
-          </div>
+          </motion.div>
 
           <div className="divide-y divide-slate-200 dark:divide-zinc-800 border-y border-slate-200 dark:border-zinc-800 text-left">
             {faqItems.map((item, idx) => {
@@ -930,17 +999,17 @@ export default function InteractiveLanding({
                     onClick={() => setFaqOpenIndex(isOpen ? null : idx)}
                     className="w-full flex items-center justify-between gap-4 py-2 text-left cursor-pointer focus:outline-none group"
                   >
-                    <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white group-hover:text-[#0B192C] dark:group-hover:text-[#D4AF37] transition-colors">
+                    <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white group-hover:text-[#059669] dark:group-hover:text-[#D4AF37] transition-colors">
                       {item.q}
                     </span>
                     <ChevronDown
                       className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${
-                        isOpen ? 'rotate-180 text-[#0B192C] dark:text-[#D4AF37]' : ''
+                        isOpen ? 'rotate-180 text-[#059669] dark:text-[#D4AF37]' : ''
                       }`}
                     />
                   </button>
                   {isOpen && (
-                    <p className="pt-2 pb-3 text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed max-w-3xl">
+                    <p className="pt-2 pb-3 text-sm text-slate-700 dark:text-zinc-300 leading-relaxed max-w-3xl">
                       {item.a}
                     </p>
                   )}
@@ -951,60 +1020,477 @@ export default function InteractiveLanding({
         </div>
       </section>
 
-      {/* 8. FINAL CTA SECTION */}
-      <section className="py-20 px-4 sm:px-8 bg-[#FAF9F6] dark:bg-zinc-950 border-t border-slate-200/80 dark:border-zinc-800">
-        <div className="max-w-4xl mx-auto bg-meezan-header text-white rounded-3xl border border-emerald-700/40 p-8 sm:p-12 text-center shadow-lg space-y-6">
-          <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#D4AF37]">
-            <span>{BRAND.getTagline(language)}</span>
+      {/* 9. SUPPORT, HELPLINES & CONTACT SECTION (Smooth Scroll Entrance & Micro-Interactions) */}
+      <section
+        id="support"
+        className="py-20 lg:py-24 px-4 sm:px-8 bg-white dark:bg-zinc-950 border-t border-slate-200/80 dark:border-zinc-800"
+      >
+        <div className="max-w-7xl mx-auto space-y-16">
+          {/* Section Main Header with Smooth Fade-up */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.6, ease: smoothEase }}
+            className="max-w-2xl text-left space-y-3"
+          >
+            <div className="text-xs font-extrabold uppercase tracking-wider text-[#059669] dark:text-[#D4AF37]">
+              {language === 'en' ? 'Support & Help Desk' : 'ہیلپ ڈیسک و رابطہ'}
+            </div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight text-balance">
+              {language === 'en'
+                ? 'We are here to support your business every step of the way'
+                : 'ہم آپ کے کاروباری سفر کے ہر قدم پر آپ کی رہنمائی کے لیے حاضر ہیں'}
+            </h2>
+            <p className="text-sm sm:text-base font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
+              {language === 'en'
+                ? 'Reach our dedicated merchant assistance team via direct hotlines, WhatsApp, verified office addresses, or send us a message below.'
+                : 'کسی بھی رہنمائی کے لیے ہمارے ہیلپ لائن نمبرز، واٹس ایپ، تصدیق شدہ دفتری پتہ پر رابطہ کریں یا نیچے پیغام ارسال کریں۔'}
+            </p>
+          </motion.div>
+
+          {/* 1. HELPLINES SECTION */}
+          <div className="space-y-6 text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-40px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="flex items-center gap-2.5"
+            >
+              <div className="h-2 w-2 rounded-full bg-[#059669]" />
+              <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#064E3B] dark:text-[#D4AF37]">
+                HELPLINES
+              </h3>
+            </motion.div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  title: language === 'en' ? 'Toll-Free Merchant Helpline' : 'ٹول فری مرچنٹ ہیلپ لائن',
+                  number: '0800-MEEZAN (0800-633926)',
+                  timing: language === 'en' ? 'Mon – Sat: 9:00 AM – 9:00 PM' : 'پیر تا ہفتہ: صبح 9 تا رات 9 بجے',
+                  badge: language === 'en' ? 'Toll-Free' : 'مفت کال',
+                  icon: Phone
+                },
+                {
+                  title: language === 'en' ? 'Direct Mobile Helpline' : 'ڈائریکٹ موبائل ہیلپ لائن',
+                  number: '+92 300 848 3333',
+                  timing: language === 'en' ? '24/7 Priority Support' : '24/7 فوری رابطہ سروس',
+                  badge: language === 'en' ? 'Direct Line' : 'موبائل لائن',
+                  icon: Phone
+                },
+                {
+                  title: language === 'en' ? 'Urdu & Regional Language Desk' : 'اردو و علاقائی زبانوں کی ہیلپ لائن',
+                  number: '+92 42 3578 9900',
+                  timing: language === 'en' ? 'Mon – Fri: 9:00 AM – 6:00 PM' : 'پیر تا جمعہ: صبح 9 تا شام 6 بجے',
+                  badge: language === 'en' ? 'Regional Support' : 'علاقائی رہنمائی',
+                  icon: Globe
+                }
+              ].map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-30px' }}
+                    transition={{
+                      duration: 0.6,
+                      delay: idx * 0.12,
+                      ease: smoothEase
+                    }}
+                    whileHover={{ y: -4 }}
+                    className="interactive-card bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between shadow-2xs cursor-pointer group"
+                  >
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-400 group-hover:bg-[#064E3B] group-hover:text-[#D4AF37] dark:group-hover:bg-[#D4AF37]/20 flex items-center justify-center transition-colors">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100/70 dark:bg-emerald-950/70 text-[#064E3B] dark:text-emerald-300">
+                          {item.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-600 dark:text-zinc-400">
+                          {item.title}
+                        </h4>
+                        <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1 font-mono tracking-tight">
+                          {item.number}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-zinc-800 text-xs font-semibold text-slate-500 dark:text-zinc-400">
+                      {item.timing}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight text-balance">
-            {language === 'en'
-              ? 'Ready to balance your business accounts?'
-              : 'کیا آپ اپنے کاروباری حساب کتاب کو متوازن بنانے کے لیے تیار ہیں؟'}
-          </h2>
-          <p className="text-sm sm:text-base text-emerald-100 max-w-xl mx-auto leading-relaxed">
-            {language === 'en'
-              ? `Create your ${BRAND.name} workspace today to organize customer ledgers, track payments, and keep your business operations flowing smoothly.`
-              : `آج ہی اپنا ${BRAND.name} اکاؤنٹ بنائیں اور گاہکوں کے کھاتے، وصولیاں اور کاروباری ریکارڈ کو محفوظ طریقے سے منظم کریں۔`}
-          </p>
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3.5">
-            <button
-              type="button"
-              onClick={() => onOpenAuth('signup')}
-              className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-[#042F24] font-extrabold text-sm shadow-xs transition-all cursor-pointer whitespace-nowrap"
+
+          {/* 2. OTHER CHANNELS SECTION */}
+          <div className="space-y-6 text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-40px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="flex items-center gap-2.5"
             >
-              <span>{language === 'en' ? 'Get Started' : 'مفت اکاؤنٹ بنائیں'}</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenAuth('login')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-emerald-600/60 bg-emerald-950/60 hover:bg-emerald-900/70 text-white font-semibold text-sm transition-all cursor-pointer whitespace-nowrap"
+              <div className="h-2 w-2 rounded-full bg-[#059669]" />
+              <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#064E3B] dark:text-[#D4AF37]">
+                OTHER CHANNELS
+              </h3>
+            </motion.div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  title: language === 'en' ? 'Official WhatsApp Business' : 'آفیشل واٹس ایپ بزنس',
+                  detail: '+92 300 848 3333',
+                  actionText: language === 'en' ? 'Chat on WhatsApp' : 'واٹس ایپ پر میسج کریں',
+                  url: 'https://wa.me/923008483333',
+                  icon: Users,
+                  hint: language === 'en' ? 'Instant voice & text support' : 'فوری ٹیکسٹ و وائس سپورٹ'
+                },
+                {
+                  title: language === 'en' ? 'Email Support & Billing' : 'ای میل سپورٹ و بلنگ',
+                  detail: 'support@meezanflow.com',
+                  actionText: language === 'en' ? 'Send Email' : 'ای میل بھیجیں',
+                  url: 'mailto:support@meezanflow.com',
+                  icon: Mail,
+                  hint: language === 'en' ? 'Typical reply within 2 hours' : '2 گھنٹے کے اندر تسلی بخش جواب'
+                },
+                {
+                  title: language === 'en' ? 'Merchant Community & FAQ' : 'مرچنٹ فورم و رہنمائی',
+                  detail: 'community.meezanflow.com',
+                  actionText: language === 'en' ? 'Explore Guides' : 'رہنمائی گائیڈز دیکھیں',
+                  url: '#faq',
+                  icon: HelpCircle,
+                  hint: language === 'en' ? 'Interactive tutorials & docs' : 'رہنما ویڈیوز اور مضامین'
+                }
+              ].map((channel, idx) => {
+                const Icon = channel.icon;
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-30px' }}
+                    transition={{
+                      duration: 0.6,
+                      delay: idx * 0.12,
+                      ease: smoothEase
+                    }}
+                    whileHover={{ y: -4 }}
+                    className="interactive-card bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 flex flex-col justify-between shadow-2xs cursor-pointer group"
+                  >
+                    <div className="space-y-4">
+                      <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-400 group-hover:bg-[#064E3B] group-hover:text-[#D4AF37] dark:group-hover:bg-[#D4AF37]/20 flex items-center justify-center transition-colors">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-600 dark:text-zinc-400">
+                          {channel.title}
+                        </h4>
+                        <p className="text-base font-extrabold text-slate-900 dark:text-white mt-1 break-all">
+                          {channel.detail}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-500 dark:text-zinc-400">
+                        {channel.hint}
+                      </span>
+                      <span className="font-extrabold text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                        <span>{channel.actionText}</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3. REGULATORY ESCALATION SECTION */}
+          <div className="space-y-6 text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-40px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="flex items-center gap-2.5"
             >
-              <span>{language === 'en' ? 'Login' : 'لاگ ان کریں'}</span>
-            </button>
+              <div className="h-2 w-2 rounded-full bg-[#059669]" />
+              <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#064E3B] dark:text-[#D4AF37]">
+                REGULATORY ESCALATION
+              </h3>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-30px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="bg-slate-50 dark:bg-zinc-900/60 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-8"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                <div className="md:col-span-8 space-y-3">
+                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#064E3B] dark:text-[#D4AF37]">
+                    <Shield className="h-4 w-4" />
+                    <span>Compliance & Grievance Redressal</span>
+                  </div>
+                  <h4 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+                    {language === 'en'
+                      ? 'Enterprise Dispute Resolution & Escalation Cell'
+                      : 'شکایات ازالہ و قانونی ریگولیٹری رہنمائی'}
+                  </h4>
+                  <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
+                    {language === 'en'
+                      ? 'If your inquiry remains unresolved after 48 business hours via standard channels, your ticket is automatically forwarded to the MeezanFlow Escalation Committee under ticket reference ID.'
+                      : 'اگر آپ کی شکایت کا 48 گھنٹوں میں حل نہ ہو سکے تو معاملہ خودکار طور پر ہماری اعلیٰ ریگولیٹری کمیٹی کو منتقل کر دیا جاتا ہے۔'}
+                  </p>
+                </div>
+                <div className="md:col-span-4 bg-white dark:bg-zinc-900 rounded-xl p-4 border border-slate-200 dark:border-zinc-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500 dark:text-zinc-400">Escalation Email:</span>
+                    <span className="font-bold text-[#059669] dark:text-[#D4AF37]">grievance@meezanflow.com</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500 dark:text-zinc-400">Response SLA:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">Within 24 Hours</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-500 dark:text-zinc-400">Escalation Officer:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">M. Nouman (Chief Ops)</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* 4. OFFICE & LOCATION SECTION */}
+          <div className="space-y-6 text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-40px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="flex items-center gap-2.5"
+            >
+              <div className="h-2 w-2 rounded-full bg-[#059669]" />
+              <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#064E3B] dark:text-[#D4AF37]">
+                OFFICE & LOCATION
+              </h3>
+            </motion.div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[
+                {
+                  city: language === 'en' ? 'Lahore Operations Head Office' : 'لاہور ہیڈ آفس',
+                  address: 'Level 4, Arfa Software Technology Park, Ferozepur Road, Lahore, Pakistan',
+                  contact: '+92 42 3578 9900',
+                  timing: 'Mon – Sat: 9:00 AM – 6:00 PM',
+                  badge: 'Principal Office'
+                },
+                {
+                  city: language === 'en' ? 'Karachi Regional Hub' : 'کراچی ریجنل آفس',
+                  address: 'Suite 203, Finance & Trade Centre (FTC), Main Shahrah-e-Faisal, Karachi, Pakistan',
+                  contact: '+92 21 3456 7890',
+                  timing: 'Mon – Fri: 9:00 AM – 5:30 PM',
+                  badge: 'Regional Hub'
+                }
+              ].map((office, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-30px' }}
+                  transition={{
+                    duration: 0.6,
+                    delay: idx * 0.12,
+                    ease: smoothEase
+                  }}
+                  whileHover={{ y: -4 }}
+                  className="interactive-card bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-7 flex flex-col justify-between shadow-2xs group"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-400 group-hover:bg-[#064E3B] group-hover:text-[#D4AF37] dark:group-hover:bg-[#D4AF37]/20 flex items-center justify-center transition-colors">
+                        <MapPin className="h-5 w-5" />
+                      </div>
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100/70 dark:bg-emerald-950/70 text-[#064E3B] dark:text-emerald-300">
+                        {office.badge}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white">
+                        {office.city}
+                      </h4>
+                      <p className="text-sm text-slate-600 dark:text-zinc-300 mt-2 leading-relaxed">
+                        {office.address}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-mono font-bold text-[#059669] dark:text-[#D4AF37]">
+                      {office.contact}
+                    </span>
+                    <span className="text-slate-500 dark:text-zinc-400 font-medium">
+                      {office.timing}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* 5. SEND US A MESSAGE SECTION */}
+          <div className="space-y-6 text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-40px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="flex items-center gap-2.5"
+            >
+              <div className="h-2 w-2 rounded-full bg-[#059669]" />
+              <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#064E3B] dark:text-[#D4AF37]">
+                SEND US A MESSAGE
+              </h3>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-30px' }}
+              transition={{ duration: 0.6, ease: smoothEase }}
+              className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200/90 dark:border-zinc-800 p-6 sm:p-10 shadow-sm"
+            >
+              <form onSubmit={handleSendMessage} className="space-y-5 max-w-3xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 uppercase tracking-wider">
+                      {language === 'en' ? 'Your Name' : 'آپ کا نام'} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={contactName}
+                      onChange={(e) => setContactName(e.target.value)}
+                      placeholder={language === 'en' ? 'e.g. Tariq Mehmood' : 'مثال: طارق محمود'}
+                      className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white transition-all focus:border-[#059669]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 uppercase tracking-wider">
+                      {language === 'en' ? 'Email or Mobile Number' : 'ای میل یا موبائل نمبر'} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder={language === 'en' ? 'e.g. 0300-1234567 or you@gmail.com' : 'مثال: 03001234567'}
+                      className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white transition-all focus:border-[#059669]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 uppercase tracking-wider">
+                    {language === 'en' ? 'Subject / Inquiry Category' : 'موضوع / سوال کی قسم'}
+                  </label>
+                  <input
+                    type="text"
+                    value={contactSubject}
+                    onChange={(e) => setContactSubject(e.target.value)}
+                    placeholder={language === 'en' ? 'e.g. Customer Ledger Sync or Billing' : 'مثال: کھاتا سنک یا بلنگ'}
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white transition-all focus:border-[#059669]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 uppercase tracking-wider">
+                    {language === 'en' ? 'Your Message' : 'آپ کا پیغام'} *
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={contactMessage}
+                    onChange={(e) => setContactMessage(e.target.value)}
+                    placeholder={
+                      language === 'en'
+                        ? 'Describe how we can assist your business...'
+                        : 'ہمیں تفصیل سے بتائیں ہم آپ کے کاروبار کی کیسے مدد کر سکتے ہیں...'
+                    }
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white transition-all focus:border-[#059669] resize-none"
+                  />
+                </div>
+
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-4">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ y: -2 }}
+                    type="submit"
+                    disabled={isSubmittingMessage}
+                    className="relative overflow-hidden inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl bg-meezan-btn text-white text-sm font-extrabold shadow-md cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    <span>
+                      {isSubmittingMessage
+                        ? language === 'en'
+                          ? 'Sending Message...'
+                          : 'پیغام بھیجا جا رہا ہے...'
+                        : language === 'en'
+                        ? 'Send Message'
+                        : 'پیغام بھیجیں'}
+                    </span>
+                    <Send className="h-4 w-4" />
+                  </motion.button>
+
+                  {messageSuccess && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3.5 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800/60"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>
+                        {language === 'en'
+                          ? 'Thank you! Your message has been received. Our team will contact you shortly.'
+                          : 'شکریہ! آپ کا پیغام موصول ہو چکا ہے۔ ہماری ٹیم جلد رابطہ کرے گی۔'}
+                      </span>
+                    </motion.div>
+                  )}
+                </div>
+              </form>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* 9. SITE DIRECTORY & LEGAL LINKS */}
+      {/* 9. SITE DIRECTORY & LEGAL LINKS (Dark Theme Visual Anchor) */}
       <section
         aria-label="Site directory"
-        className="bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 py-12 px-4 sm:px-8 text-left"
+        className="bg-[#042F24] border-t border-white/10 py-14 px-4 sm:px-8 text-left"
       >
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10">
           {/* Brand Column */}
-          <div className="md:col-span-5 space-y-3">
+          <div className="md:col-span-5 space-y-3.5">
             <div className="flex items-center gap-2.5">
               <MeezanFlowLogo size="sm" />
-              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+              <span className="text-lg font-extrabold tracking-tight text-white">
                 {BRAND.name}
               </span>
             </div>
-            <p className="text-xs font-semibold text-[#0B192C] dark:text-[#D4AF37]">
+            <p className="text-sm font-bold text-emerald-400">
               {BRAND.getTagline(language)}
             </p>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 max-w-sm leading-relaxed">
+            <p className="text-sm text-gray-300 max-w-sm leading-relaxed font-medium">
               {language === 'en'
                 ? 'Modern business accounting, customer credit folders, cash book management, and invoicing for small businesses, shopkeepers, and wholesalers.'
                 : 'پاکستان بھر کے کاروباروں، دکانداروں اور ہول سیلرز کے لیے جدید اکاؤنٹنگ، ادھار ٹریکنگ، کیش بک اور انوائس مینجمنٹ سسٹم۔'}
@@ -1012,16 +1498,16 @@ export default function InteractiveLanding({
           </div>
 
           {/* Product Navigation */}
-          <div className="md:col-span-3 space-y-2.5">
-            <div className="text-xs font-bold text-slate-900 dark:text-white">
+          <div className="md:col-span-3 space-y-3.5">
+            <div className="text-sm font-extrabold uppercase tracking-wider text-white">
               {language === 'en' ? 'Product' : 'پروڈکٹ'}
             </div>
-            <ul className="space-y-2 text-xs text-slate-600 dark:text-zinc-400">
+            <ul className="space-y-2.5 text-sm sm:text-base font-medium text-gray-300">
               <li>
                 <button
                   type="button"
                   onClick={() => scrollToSection('features')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Features' : 'خصوصیات'}
                 </button>
@@ -1030,7 +1516,7 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => scrollToSection('how-it-works')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'How It Works' : 'طریقہ کار'}
                 </button>
@@ -1039,7 +1525,7 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => scrollToSection('benefits')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Benefits' : 'فوائد'}
                 </button>
@@ -1048,25 +1534,34 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => scrollToSection('faq')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'FAQ' : 'عام سوالات'}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('support')}
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
+                >
+                  {language === 'en' ? 'Support & Helplines' : 'مدد و ہیلپ لائن'}
                 </button>
               </li>
             </ul>
           </div>
 
           {/* Account & Legal */}
-          <div className="md:col-span-4 space-y-2.5">
-            <div className="text-xs font-bold text-slate-900 dark:text-white">
+          <div className="md:col-span-4 space-y-3.5">
+            <div className="text-sm font-extrabold uppercase tracking-wider text-white">
               {language === 'en' ? 'Account & Legal' : 'اکاؤنٹ اور قانونی معلومات'}
             </div>
-            <ul className="space-y-2 text-xs text-slate-600 dark:text-zinc-400">
+            <ul className="space-y-2.5 text-sm sm:text-base font-medium text-gray-300">
               <li>
                 <button
                   type="button"
                   onClick={() => onOpenAuth('login')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Merchant Login' : 'مرچنٹ لاگ ان'}
                 </button>
@@ -1075,7 +1570,7 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => onOpenAuth('signup')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Create Free Account' : 'مفت اکاؤنٹ بنائیں'}
                 </button>
@@ -1084,7 +1579,7 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => setLegalModal('privacy')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Privacy Policy' : 'پرائیویسی پالیسی'}
                 </button>
@@ -1093,7 +1588,7 @@ export default function InteractiveLanding({
                 <button
                   type="button"
                   onClick={() => setLegalModal('terms')}
-                  className="hover:text-[#0B192C] dark:hover:text-[#D4AF37] cursor-pointer"
+                  className="text-gray-300 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   {language === 'en' ? 'Terms of Service' : 'شرائط و ضوابط'}
                 </button>
@@ -1156,7 +1651,7 @@ export default function InteractiveLanding({
               <button
                 type="button"
                 onClick={() => setLegalModal(null)}
-                className="px-4 py-2 rounded-lg bg-[#0B192C] hover:bg-[#132847] dark:bg-[#D4AF37] dark:text-[#0B192C] text-white text-xs font-semibold cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-bold cursor-pointer"
               >
                 {language === 'en' ? 'Close' : 'بند کریں'}
               </button>

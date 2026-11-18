@@ -47,16 +47,25 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration & Stale Cache Purge -->
     <script>
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(key) {
+            if (key !== 'meezanflow-v3') {
+              caches.delete(key);
+            }
+          });
+        }).catch(function() {});
+      }
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((reg) => {
-              console.log('MeezanFlow PWA SW Registered under scope:', reg.scope);
+              reg.update().catch(() => {});
             })
-            .catch((err) => {
-              console.error('MeezanFlow PWA SW Registration failed:', err);
+            .catch(() => {
+              // Ignore SW registration restrictions in sandboxed environments
             });
         });
       }

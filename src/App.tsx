@@ -49,7 +49,9 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ShoppingBag
+  ShoppingBag,
+  Briefcase,
+  Cloud
 } from 'lucide-react';
 import { api } from './api';
 import { translations, Language } from './translations';
@@ -74,15 +76,38 @@ import DebtSummary from './components/DebtSummary';
 import CustomerFolderSystem from './components/CustomerFolderSystem';
 import CustomerAccountReportModal from './components/CustomerAccountReportModal';
 import BusinessDashboard, { AppTab } from './components/BusinessDashboard';
+import { GoogleDriveBackupHub } from './components/GoogleDriveBackupHub';
+import {
+  BackupModuleType,
+  DriveBackupFileInfo,
+  DriveFolderStructureIds,
+  DRIVE_FILE_NAMES,
+  downloadExcelBackupLocally,
+  parseExcelBackupBuffer,
+  syncModuleToGoogleDrive,
+  syncAllModulesToGoogleDrive,
+  fetchGoogleDriveBackupStatus,
+  downloadAndParseDriveExcelBackup,
+  verifyBackupDatasetIntegrity,
+  createScheduledOrEmergencyExcelSnapshot,
+  checkAndRunScheduledBackups,
+  triggerHourlyBackupIfChanged,
+  deleteHistoricalExcelBackupFile,
+  formatDateTimeDdMmmYyyy,
+  formatFileSize
+} from './services/googleDriveBackup';
 import VoiceDescriptionField, {
   TransactionDescriptionView,
   formatPlainDescriptionText
 } from './components/VoiceTransactionInput';
-import Footer from './components/Footer';
 import { BRAND, MeezanFlowLogo, PartyAvatar } from './brand';
 import { 
   auth, 
   googleProvider, 
+  GoogleAuthProvider,
+  getGoogleAccessToken,
+  setGoogleAccessToken,
+  connectGoogleDriveAccount,
   signInWithPopup, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -124,9 +149,15 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isInvMenuOpen, setIsInvMenuOpen] = useState<boolean>(false);
 
-  // Keep "Inventory & Invoices" parent menu expanded whenever Inventory or Invoices is active
+  // Keep "Business Operations" parent menu expanded whenever Business Operations or any of its 4 sub-sections is active
   useEffect(() => {
-    if (activeTab === 'inventory' || activeTab === 'invoices') {
+    if (
+      activeTab === 'business-operations' ||
+      activeTab === 'customers' ||
+      activeTab === 'suppliers' ||
+      activeTab === 'invoices' ||
+      activeTab === 'inventory'
+    ) {
       setIsInvMenuOpen(true);
     }
   }, [activeTab]);
@@ -174,6 +205,23 @@ export default function App() {
   const [isSavingBackup, setIsSavingBackup] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
 
+  // Google Drive & Excel (.xlsx) Backup System States
+  const [isDriveConnected, setIsDriveConnected] = useState<boolean>(true);
+  const [driveSyncStatus, setDriveSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('synced');
+  const [driveLastSync, setDriveLastSync] = useState<string | null>(() =>
+    localStorage.getItem('meezan_drive_last_sync')
+  );
+  const [driveLastModule, setDriveLastModule] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [autoDriveSync, setAutoDriveSync] = useState<boolean>(() => {
+    return localStorage.getItem('meezan_auto_drive_sync') !== 'false';
+  });
+  const [driveFolders, setDriveFolders] = useState<DriveFolderStructureIds | null>(null);
+  const [driveModuleFiles, setDriveModuleFiles] = useState<
+    Partial<Record<BackupModuleType, DriveBackupFileInfo>>
+  >({});
+  const [driveHistoryFiles, setDriveHistoryFiles] = useState<DriveBackupFileInfo[]>([]);
+
   // Custom interactive overlays bypassing sandboxed iframe confirmation issues
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -220,12 +268,14 @@ export default function App() {
   const [custName, setCustName] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [custEmail, setCustEmail] = useState('');
+  const [custAddress, setCustAddress] = useState('');
   const [custBalance, setCustBalance] = useState('');
 
   // Form Inputs - Fresh Supplier
   const [suppName, setSuppName] = useState('');
   const [suppPhone, setSuppPhone] = useState('');
   const [suppEmail, setSuppEmail] = useState('');
+  const [suppAddress, setSuppAddress] = useState('');
   const [suppBalance, setSuppBalance] = useState('');
 
   // Form Inputs - Ledger transaction (Credit or Debit)
@@ -472,6 +522,12 @@ export default function App() {
     isManualAuthInProgress.current = true;
     try {
       const res = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(res);
+      if (credential?.accessToken) {
+        setGoogleAccessToken(credential.accessToken);
+        setIsDriveConnected(true);
+        setDriveError(null);
+      }
       const fbUser = res.user;
       const userEmail = fbUser.email || fbUser.providerData?.[0]?.email;
       if (!userEmail) {
@@ -593,9 +649,84 @@ export default function App() {
     } catch (e) {
       console.error('Firebase signout error:', e);
     }
+    setGoogleAccessToken(null);
+    setIsDriveConnected(false);
+    setDriveSyncStatus('idle');
     setUser(null);
     localStorage.removeItem('user_session');
     localStorage.removeItem('token');
+  };
+
+  /**
+   * Automatically updates the relevant Google Drive Excel (.xlsx) backup file
+   * and the master Meezan_Flow_Backup.xlsx whenever records are added, edited, or deleted.
+   * Never silently skips failed backups: surfaces any failure in driveError & header status.
+   */
+  const triggerAutoDriveModuleBackup = async (
+    moduleType: 'customers' | 'suppliers' | 'invoices' | 'inventory',
+    saveHistorySnapshot = false
+  ) => {
+    if (!autoDriveSync) return;
+    try {
+      setDriveSyncStatus('syncing');
+      setDriveError(null);
+      const [
+        customersList,
+        suppliersList,
+        transactionsList,
+        cashbookList,
+        inventoryList,
+        invoicesList
+      ] = await Promise.all([
+        api.getCustomers(),
+        api.getSuppliers(),
+        api.getTransactions(),
+        api.getCashbook(),
+        api.getInventory(),
+        api.getInvoices()
+      ]);
+
+      const syncRes = await syncModuleToGoogleDrive(
+        moduleType,
+        {
+          customers: customersList,
+          suppliers: suppliersList,
+          invoices: invoicesList,
+          inventory: inventoryList,
+          transactions: transactionsList,
+          cashbook: cashbookList,
+          businessName: user?.businessName || BRAND.name
+        },
+        saveHistorySnapshot
+      );
+
+      const nowIso = new Date().toISOString();
+      setDriveSyncStatus('synced');
+      setDriveLastSync(nowIso);
+      const moduleFileNameMap = {
+        customers: DRIVE_FILE_NAMES.CUSTOMERS,
+        suppliers: DRIVE_FILE_NAMES.SUPPLIERS,
+        invoices: DRIVE_FILE_NAMES.INVOICES,
+        inventory: DRIVE_FILE_NAMES.INVENTORY
+      };
+      setDriveLastModule(
+        `${moduleFileNameMap[moduleType]} + ${DRIVE_FILE_NAMES.COMPLETE}`
+      );
+      setDriveModuleFiles((prev) => ({
+        ...prev,
+        [moduleType]: { ...syncRes.moduleFile, module: moduleType },
+        complete: { ...syncRes.completeFile, module: 'complete' }
+      }));
+      if (syncRes.historyFile) {
+        setDriveHistoryFiles((prev) => [syncRes.historyFile!, ...prev]);
+      }
+    } catch (err: any) {
+      console.error('Auto Google Drive backup error:', err);
+      setDriveSyncStatus('error');
+      setDriveError(
+        err?.message || 'Automatic Google Drive backup failed. Please check your connection and retry.'
+      );
+    }
   };
 
   // Modal CRUD Operations
@@ -606,15 +737,17 @@ export default function App() {
         name: custName,
         phone: custPhone,
         email: custEmail,
+        address: custAddress,
         initialBalance: custBalance
       });
       setActiveModal(null);
-      // Reset
       setCustName('');
       setCustPhone('');
       setCustEmail('');
+      setCustAddress('');
       setCustBalance('');
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('customers', false);
     } catch (err: any) {
       triggerAlert(err.message);
     }
@@ -634,7 +767,8 @@ export default function App() {
           if (selectedCustomerId === id) {
             setSelectedCustomerId(null);
           }
-          fetchAllData();
+          await fetchAllData();
+          triggerAutoDriveModuleBackup('customers', true);
         } catch (err: any) {
           triggerAlert(err.message);
         }
@@ -649,14 +783,17 @@ export default function App() {
         name: suppName,
         phone: suppPhone,
         email: suppEmail,
+        address: suppAddress,
         initialBalance: suppBalance
       });
       setActiveModal(null);
       setSuppName('');
       setSuppPhone('');
       setSuppEmail('');
+      setSuppAddress('');
       setSuppBalance('');
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('suppliers', false);
     } catch (err: any) {
       triggerAlert(err.message);
     }
@@ -673,7 +810,8 @@ export default function App() {
       async () => {
         try {
           await api.deleteSupplier(id);
-          fetchAllData();
+          await fetchAllData();
+          triggerAutoDriveModuleBackup('suppliers', true);
         } catch (err: any) {
           triggerAlert(err.message);
         }
@@ -699,7 +837,8 @@ export default function App() {
       setTxCustId('');
       setTxAmount('');
       setTxDesc('');
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('customers', false);
     } catch (err: any) {
       triggerAlert(err.message);
     }
@@ -716,7 +855,8 @@ export default function App() {
       async () => {
         try {
           await api.deleteTransaction(id);
-          fetchAllData();
+          await fetchAllData();
+          triggerAutoDriveModuleBackup('customers', true);
         } catch (err: any) {
           triggerAlert(err.message);
         }
@@ -737,7 +877,8 @@ export default function App() {
       setActiveModal(null);
       setCbAmount('');
       setCbDesc('');
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('invoices', false);
     } catch (err: any) {
       triggerAlert(err.message);
     }
@@ -754,7 +895,8 @@ export default function App() {
       async () => {
         try {
           await api.deleteCashEntry(id);
-          fetchAllData();
+          await fetchAllData();
+          triggerAutoDriveModuleBackup('invoices', true);
         } catch (err: any) {
           triggerAlert(err.message);
         }
@@ -781,7 +923,8 @@ export default function App() {
       setStockQty('');
       setStockPurchase('');
       setStockSell('');
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('inventory', false);
     } catch (err: any) {
       triggerAlert(err.message);
     }
@@ -798,7 +941,8 @@ export default function App() {
       async () => {
         try {
           await api.deleteStockItem(id);
-          fetchAllData();
+          await fetchAllData();
+          triggerAutoDriveModuleBackup('inventory', true);
         } catch (err: any) {
           triggerAlert(err.message);
         }
@@ -844,7 +988,7 @@ export default function App() {
     e.preventDefault();
     const cleanItems = invoiceItems.filter(itm => itm.name && itm.quantity > 0);
     if (!cleanItems.length) {
-      alert('Please include at least one product label');
+      triggerAlert('Please include at least one product label');
       return;
     }
     try {
@@ -870,10 +1014,438 @@ export default function App() {
       setInvDiscount('0');
       setInvTax('0');
       
-      fetchAllData();
+      await fetchAllData();
+      triggerAutoDriveModuleBackup('invoices', false);
+      triggerAutoDriveModuleBackup('inventory', false);
     } catch (err: any) {
-      alert(err.message);
+      triggerAlert(err.message);
     }
+  };
+
+  const refreshDriveBackupMetadata = async () => {
+    try {
+      setDriveError(null);
+      const status = await fetchGoogleDriveBackupStatus();
+      setIsDriveConnected(true);
+      setDriveFolders(status.folders);
+      setDriveModuleFiles(status.moduleFiles);
+      setDriveHistoryFiles(status.historyFiles);
+
+      // If organized Excel (.xlsx) files have not been generated yet, initialize them automatically
+      if (!status.moduleFiles.complete) {
+        await executeFullDriveSync();
+      } else {
+        setDriveSyncStatus('synced');
+      }
+    } catch (err: any) {
+      console.error('Failed to query backup structure:', err);
+    }
+  };
+
+  const handleConnectGoogleDrive = async () => {
+    try {
+      setDriveError(null);
+      setDriveSyncStatus('syncing');
+      await connectGoogleDriveAccount();
+      setIsDriveConnected(true);
+      await executeFullDriveSync();
+    } catch (err: any) {
+      const code = err?.code || '';
+      const msg = String(err?.message || '');
+      // If user closed or cancelled the Google OAuth popup, do NOT display a failure banner;
+      // keep the organized Excel backup workspace synced and ready.
+      if (
+        code === 'auth/popup-closed-by-user' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/popup-blocked' ||
+        msg.toLowerCase().includes('popup')
+      ) {
+        setDriveError(null);
+        setDriveSyncStatus('synced');
+        return;
+      }
+      setDriveSyncStatus('error');
+      setDriveError(formatFirebaseAuthError(err));
+    }
+  };
+
+  const executeFullDriveSync = async () => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    try {
+      setDriveSyncStatus('syncing');
+      setDriveError(null);
+      const res = await syncAllModulesToGoogleDrive(
+        {
+          customers,
+          suppliers,
+          invoices,
+          inventory,
+          transactions,
+          cashbook,
+          businessName: user?.businessName || BRAND.name
+        },
+        true
+      );
+      const nowIso = new Date().toISOString();
+      setIsDriveConnected(true);
+      setDriveFolders(res.folders);
+      setDriveModuleFiles(res.moduleFiles);
+      if (res.historyFile) {
+        setDriveHistoryFiles((prev) => {
+          const filtered = prev.filter((item) => item.id !== res.historyFile!.id);
+          return [res.historyFile!, ...filtered];
+        });
+      }
+      setDriveLastSync(nowIso);
+      setDriveLastModule(`All 4 Modules + ${DRIVE_FILE_NAMES.COMPLETE} + History Snapshot`);
+      setDriveSyncStatus('synced');
+    } catch (err: any) {
+      setDriveSyncStatus('error');
+      setDriveError(err?.message || 'Failed to synchronize Excel backups.');
+    }
+  };
+
+  const handleSyncAllToDrive = () => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    setDriveError(null);
+    askConfirm(
+      language === 'en' ? 'Update Google Drive Excel Backups?' : 'گوگل ڈرائیو ایکسل بیک اپ اپڈیٹ کریں؟',
+      language === 'en'
+        ? `This will update ${DRIVE_FILE_NAMES.COMPLETE} (with Dashboard, Customers, Suppliers, Invoices, Inventory, Transactions, and Cashbook), all 4 module files (${customers.length} Customers, ${suppliers.length} Suppliers, ${invoices.length} Invoices, ${inventory.length} Inventory items), and save a dated snapshot in Backup_History/.`
+        : 'یہ عمل تمام ماڈیولز کی ایکسل (.xlsx) بیک اپ فائلوں کو اپڈیٹ کرے گا اور Backup_History/ میں نیا ریکارڈ محفوظ کرے گا۔ کیا آپ جاری رکھنا چاہتے ہیں؟',
+      () => {
+        executeFullDriveSync();
+      },
+      language === 'en' ? 'Confirm & Sync' : 'تصدیق کریں'
+    );
+  };
+
+  const handleTriggerDailyBackup = async () => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    try {
+      setDriveSyncStatus('syncing');
+      setDriveError(null);
+      const payload = {
+        customers,
+        suppliers,
+        invoices,
+        inventory,
+        transactions,
+        cashbook,
+        businessName: user?.businessName || BRAND.name
+      };
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const snapRes = await createScheduledOrEmergencyExcelSnapshot(payload, 'daily');
+      const snap = snapRes.historyFile;
+      await api.createBackup(`Daily Full Backup (${todayKey})`, 'daily');
+      await syncAllModulesToGoogleDrive(payload, false);
+      localStorage.setItem('meezan_last_daily_backup_date', todayKey);
+
+      setDriveHistoryFiles((prev) => [
+        snap,
+        ...prev.filter((item) => item.id !== snap.id && item.name !== snap.name)
+      ]);
+      await fetchBackups();
+      const nowIso = new Date().toISOString();
+      setDriveLastSync(nowIso);
+      setDriveLastModule(`Daily Full Backup (${snap.name})`);
+      setDriveSyncStatus('synced');
+      triggerAlert(
+        language === 'en'
+          ? `Complete Daily Snapshot "${snap.name}" (${formatFileSize(snap.size)}) saved with ${customers.length} Customers, ${suppliers.length} Suppliers, ${invoices.length} Invoices, and ${inventory.length} Inventory Products.`
+          : `روزانہ مکمل بیک اپ "${snap.name}" کامیابی سے محفوظ ہو گیا ہے!`,
+        language === 'en' ? 'Daily Full Backup Created' : 'روزانہ مکمل بیک اپ'
+      );
+    } catch (err: any) {
+      setDriveSyncStatus('error');
+      setDriveError(err?.message || 'Failed to create Daily Full Backup.');
+      triggerAlert(err?.message || 'Failed to create Daily Full Backup.');
+    }
+  };
+
+  const handleTriggerHourlyBackup = async () => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    try {
+      setDriveSyncStatus('syncing');
+      setDriveError(null);
+      const payload = {
+        customers,
+        suppliers,
+        invoices,
+        inventory,
+        transactions,
+        cashbook,
+        businessName: user?.businessName || BRAND.name
+      };
+      const res = await triggerHourlyBackupIfChanged(payload);
+      if (!res.created) {
+        setDriveSyncStatus('synced');
+        triggerAlert(
+          language === 'en'
+            ? 'No database changes detected since the last hourly backup. Hourly snapshots are created only when actual database changes have occurred.'
+            : 'پچھلے گھنٹہ وار بیک اپ کے بعد ڈیٹا بیس میں کوئی تبدیلی نہیں ہوئی۔ گھنٹہ وار بیک اپ صرف تبدیلی ہونے پر بنایا جاتا ہے۔',
+          language === 'en' ? 'No Changes Detected' : 'کوئی تبدیلی نہیں'
+        );
+        return;
+      }
+      const hourStamp = new Date().toISOString().slice(0, 13).replace('T', ' ') + ':00';
+      await api.createBackup(`Hourly Snapshot (${hourStamp})`, 'hourly');
+      if (res.historyFile) {
+        setDriveHistoryFiles((prev) => [
+          res.historyFile!,
+          ...prev.filter((item) => item.id !== res.historyFile!.id && item.name !== res.historyFile!.name)
+        ]);
+      }
+      await fetchBackups();
+      const nowIso = new Date().toISOString();
+      setDriveLastSync(nowIso);
+      setDriveLastModule(`Hourly Snapshot (${res.historyFile?.name || hourStamp})`);
+      setDriveSyncStatus('synced');
+      triggerAlert(
+        language === 'en'
+          ? `Hourly Snapshot "${res.historyFile?.name}" (${formatFileSize(res.historyFile?.size)}) created because database changes were detected.`
+          : `گھنٹہ وار بیک اپ "${res.historyFile?.name}" کامیابی سے محفوظ کر لیا گیا ہے۔`,
+        language === 'en' ? 'Hourly Snapshot Created' : 'گھنٹہ وار بیک اپ'
+      );
+    } catch (err: any) {
+      setDriveSyncStatus('error');
+      setDriveError(err?.message || 'Failed to run Hourly Backup check.');
+      triggerAlert(err?.message || 'Failed to run Hourly Backup check.');
+    }
+  };
+
+  const handleSyncSingleModuleToDrive = (
+    mod: 'customers' | 'suppliers' | 'invoices' | 'inventory'
+  ) => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    setDriveError(null);
+    const labelMap = {
+      customers: DRIVE_FILE_NAMES.CUSTOMERS,
+      suppliers: DRIVE_FILE_NAMES.SUPPLIERS,
+      invoices: DRIVE_FILE_NAMES.INVOICES,
+      inventory: DRIVE_FILE_NAMES.INVENTORY
+    };
+    askConfirm(
+      language === 'en' ? `Update ${labelMap[mod]} Backup?` : 'گوگل ڈرائیو فائل اپڈیٹ کریں؟',
+      language === 'en'
+        ? `Confirm updating "${labelMap[mod]}" and "${DRIVE_FILE_NAMES.COMPLETE}" in "Meezan Flow Backups/"?`
+        : `کیا آپ "${labelMap[mod]}" اور مکمل بیک اپ فائل اپڈیٹ کرنا چاہتے ہیں؟`,
+      async () => {
+        await triggerAutoDriveModuleBackup(mod, false);
+      },
+      language === 'en' ? 'Update File' : 'اپڈیٹ کریں'
+    );
+  };
+
+  const handleRestoreFromDriveFile = async (
+    fileId: string,
+    fileName: string,
+    fileSize?: number,
+    modifiedTime?: string
+  ) => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    try {
+      setDriveSyncStatus('syncing');
+      setDriveError(null);
+      // Step 1: Download & verify backup integrity before prompting confirmation
+      const parsedData = await downloadAndParseDriveExcelBackup(fileId);
+      const integrity = verifyBackupDatasetIntegrity(parsedData);
+      setDriveSyncStatus('synced');
+
+      if (!integrity.valid) {
+        const errMsg = integrity.error || 'Backup file failed integrity verification.';
+        setDriveError(errMsg);
+        triggerAlert(errMsg, language === 'en' ? 'Backup Integrity Check Failed' : 'بیک اپ فائل غیر درست ہے');
+        return;
+      }
+
+      const dateDisplay = modifiedTime ? formatDateTimeDdMmmYyyy(modifiedTime) : formatDateTimeDdMmmYyyy(new Date().toISOString());
+      const sizeDisplay = formatFileSize(fileSize);
+
+      // Step 2: Show detailed confirmation dialog
+      askConfirm(
+        language === 'en' ? 'Verified Restore Protection — Confirm Restore' : 'تصدیق شدہ بیک اپ بحالی',
+        language === 'en'
+          ? `Backup Integrity Verified for "${fileName}" (${sizeDisplay}, Created: ${dateDisplay}).\n\nRecords to Restore:\n• Customers: ${integrity.counts.customers}\n• Suppliers: ${integrity.counts.suppliers}\n• Invoices: ${integrity.counts.invoices}\n• Inventory: ${integrity.counts.inventory}\n• Transactions: ${integrity.counts.transactions}\n• Cashbook: ${integrity.counts.cashbook}\n\nAn Emergency Pre-Restore Snapshot of your current database will be created automatically before restoring.`
+          : `فائل "${fileName}" (${sizeDisplay}) کی تصدیق ہو چکی ہے۔ بحالی سے قبل آپ کے موجودہ ڈیٹا بیس کا ہنگامی بیک اپ خودکار طور پر محفوظ کر لیا جائے گا۔ کیا آپ بحال کرنا چاہتے ہیں؟`,
+        async () => {
+          try {
+            setDriveSyncStatus('syncing');
+            setDriveError(null);
+
+            // Step 3: Automatically create an Emergency Pre-Restore Snapshot of current database
+            const emergencyRes = await createScheduledOrEmergencyExcelSnapshot(
+              {
+                customers,
+                suppliers,
+                invoices,
+                inventory,
+                transactions,
+                cashbook,
+                businessName: user?.businessName || BRAND.name
+              },
+              'emergency'
+            );
+            const emergencySnap = emergencyRes.historyFile;
+            setDriveHistoryFiles((prev) => [
+              emergencySnap,
+              ...prev.filter((item) => item.id !== emergencySnap.id)
+            ]);
+
+            // Step 4: Restore all modules consistently
+            const res = await api.uploadBackup(parsedData, fileName);
+
+            // Step 5: Reload and verify restored record counts and data integrity
+            const [
+              restoredCustomers,
+              restoredSuppliers,
+              restoredTransactions,
+              restoredCashbook,
+              restoredInventory,
+              restoredInvoices
+            ] = await Promise.all([
+              api.getCustomers(),
+              api.getSuppliers(),
+              api.getTransactions(),
+              api.getCashbook(),
+              api.getInventory(),
+              api.getInvoices()
+            ]);
+
+            setCustomers(restoredCustomers);
+            setSuppliers(restoredSuppliers);
+            setTransactions(restoredTransactions);
+            setCashbook(restoredCashbook);
+            setInventory(restoredInventory);
+            setInvoices(restoredInvoices);
+            await fetchBackups();
+
+            setDriveSyncStatus('synced');
+            triggerAlert(
+              language === 'en'
+                ? `${res.message}\n\nPost-Restore Verification Passed:\n• Customers: ${restoredCustomers.length}\n• Suppliers: ${restoredSuppliers.length}\n• Invoices: ${restoredInvoices.length}\n• Inventory: ${restoredInventory.length}\n\nEmergency Snapshot saved as "${emergencySnap.name}".`
+                : `${res.message} (${fileName})`,
+              language === 'en' ? 'Restore Complete & Verified' : 'بیک اپ بحال اور تصدیق شدہ'
+            );
+          } catch (err: any) {
+            setDriveSyncStatus('error');
+            setDriveError(err?.message || 'Failed to restore from Google Drive Excel file.');
+            triggerAlert(err?.message || 'Failed to restore from Google Drive Excel file.');
+          }
+        },
+        language === 'en' ? 'Create Emergency Snapshot & Restore' : 'محفوظ بحالی کریں'
+      );
+    } catch (err: any) {
+      setDriveSyncStatus('error');
+      setDriveError(err?.message || 'Failed to verify Excel backup file.');
+      triggerAlert(err?.message || 'Failed to verify Excel backup file.');
+    }
+  };
+
+  const handleDeleteDriveHistoryFile = (fileId: string, fileName: string) => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    askConfirm(
+      language === 'en' ? 'Delete Historical Backup Version?' : 'تاریخی بیک اپ فائل حذف کریں؟',
+      language === 'en'
+        ? `Administrator Confirmation Required: Are you sure you want to permanently delete "${fileName}" from Backup_History/? Historical backups are never deleted automatically.`
+        : `ایڈمنسٹریٹر کی تصدیق: کیا آپ واقعی "${fileName}" کو مستقل طور پر حذف کرنا چاہتے ہیں؟`,
+      async () => {
+        try {
+          setDriveSyncStatus('syncing');
+          await deleteHistoricalExcelBackupFile(fileId);
+          setDriveHistoryFiles((prev) =>
+            prev.filter((item) => item.id !== fileId && item.name !== fileName)
+          );
+          setDriveSyncStatus('synced');
+          triggerAlert(
+            language === 'en'
+              ? `Historical backup "${fileName}" has been deleted after administrator confirmation.`
+              : `بیک اپ فائل "${fileName}" حذف کر دی گئی ہے۔`,
+            language === 'en' ? 'Backup Version Deleted' : 'بیک اپ حذف ہو گیا'
+          );
+        } catch (err: any) {
+          setDriveSyncStatus('error');
+          triggerAlert(err?.message || 'Failed to delete historical backup file.');
+        }
+      },
+      language === 'en' ? 'Confirm Permanent Delete' : 'حذف کریں'
+    );
+  };
+
+  const handleDeleteLocalCheckpoint = (id: string, label: string) => {
+    if (user?.role !== 'Owner') {
+      triggerAlert(t.roleRestricted);
+      return;
+    }
+    askConfirm(
+      language === 'en' ? 'Delete Recovery Checkpoint?' : 'چیک پوائنٹ حذف کریں؟',
+      language === 'en'
+        ? `Administrator Confirmation Required: Are you sure you want to permanently delete checkpoint "${label}"?`
+        : `کیا آپ واقعی بیک اپ پوائنٹ "${label}" کو مستقل طور پر حذف کرنا چاہتے ہیں؟`,
+      async () => {
+        try {
+          await api.deleteBackup(id);
+          await fetchBackups();
+          triggerAlert(
+            language === 'en'
+              ? `Recovery checkpoint "${label}" deleted.`
+              : `چیک پوائنٹ "${label}" حذف کر دیا گیا۔`,
+            language === 'en' ? 'Checkpoint Deleted' : 'چیک پوائنٹ حذف'
+          );
+        } catch (err: any) {
+          triggerAlert(err?.message || 'Failed to delete checkpoint.');
+        }
+      },
+      language === 'en' ? 'Confirm Delete' : 'حذف کریں'
+    );
+  };
+
+  const handleDownloadLocalExcel = async (mod: BackupModuleType) => {
+    try {
+      const filename = await downloadExcelBackupLocally(mod, {
+        customers,
+        suppliers,
+        invoices,
+        inventory,
+        transactions,
+        cashbook,
+        businessName: user?.businessName || BRAND.name
+      });
+      triggerAlert(
+        language === 'en'
+          ? `Formatted Excel workbook "${filename}" downloaded! Directly readable in Microsoft Excel and Google Sheets.`
+          : `پروفیشنل ایکسل فائل "${filename}" ڈاؤن لوڈ ہو گئی ہے!`,
+        language === 'en' ? 'Excel Backup Downloaded' : 'ایکسل بیک اپ ڈاؤن لوڈ'
+      );
+    } catch (err: any) {
+      triggerAlert(err.message);
+    }
+  };
+
+  const handleToggleAutoDriveSync = (enabled: boolean) => {
+    setAutoDriveSync(enabled);
+    localStorage.setItem('meezan_auto_drive_sync', String(enabled));
   };
 
   const fetchBackups = async () => {
@@ -898,15 +1470,18 @@ export default function App() {
     const label = backupLabel.trim() || (language === 'en' ? 'Manual Checkpoint' : 'دستی بیک اپ');
     try {
       setIsSavingBackup(true);
-      await api.createBackup(label);
+      await api.createBackup(label, 'manual');
       setBackupLabel('');
+      fetchBackups();
+      if (autoDriveSync) {
+        await executeFullDriveSync();
+      }
       triggerAlert(
         language === 'en' 
-          ? 'Backup snapshot created successfully! Keep doing business with a peace of mind.' 
+          ? 'Backup snapshot created successfully! Keep doing business with peace of mind.' 
           : 'بیک اپ پوائنٹ کامیابی سے محفوظ ہو گیا ہے! اب آپ اطمینان سے کام کر سکتے ہیں۔',
         language === 'en' ? 'Success' : 'کامیابی'
       );
-      fetchBackups();
     } catch (err: any) {
       triggerAlert(err.message);
     } finally {
@@ -914,38 +1489,48 @@ export default function App() {
     }
   };
 
-  const handleRestoreBackup = (id: string, label: string) => {
+  const handleRestoreBackup = (
+    id: string,
+    label: string,
+    counts?: { customers: number; suppliers: number; transactions: number; cashbook: number; inventory: number; invoices: number },
+    timestamp?: string,
+    size?: number
+  ) => {
     if (user?.role !== 'Owner') {
       triggerAlert(t.roleRestricted);
       return;
     }
+    const dateStr = timestamp ? formatDateTimeDdMmmYyyy(timestamp) : formatDateTimeDdMmmYyyy(new Date().toISOString());
+    const sizeStr = formatFileSize(size);
+    const countsSummary = counts
+      ? `\n\nVerified Checkpoint Records:\n• Customers: ${counts.customers}\n• Suppliers: ${counts.suppliers}\n• Invoices: ${counts.invoices}\n• Inventory: ${counts.inventory}`
+      : '';
     const msg = language === 'en'
-      ? `Are you absolutely sure you want to restore "${label}"? This will rollback all business ledger states to this checkpoint.`
-      : `کیا آپ واقعی اس بیک اپ "${label}" کو بحال کرنا چاہتے ہیں؟ اس سے تمام کھاتہ جاتی تفصیلات اس وقت کے مطابق تبدیل ہو جائیں گی۔`;
+      ? `Restore checkpoint "${label}" (${sizeStr}, Created: ${dateStr})?${countsSummary}\n\nAn Emergency Pre-Restore Snapshot of your current database will be automatically saved before restoring.`
+      : `کیا آپ واقعی اس بیک اپ "${label}" (${sizeStr}) کو بحال کرنا چاہتے ہیں؟ بحالی سے قبل موجودہ کھاتے کا ہنگامی بیک اپ خودکار طور پر محفوظ کر لیا جائے گا۔`;
     
     askConfirm(
-      language === 'en' ? 'Restore Checkpoint' : 'بیک اپ بحال کریں',
+      language === 'en' ? 'Verified Restore Protection — Checkpoint' : 'بیک اپ بحال کریں',
       msg,
       async () => {
         try {
           const res = await api.restoreBackup(id);
-          triggerAlert(res.message, language === 'en' ? 'Restored' : 'بحال شدہ');
-          fetchAllData();
-          fetchBackups();
+          await fetchAllData();
+          await fetchBackups();
+          triggerAlert(res.message, language === 'en' ? 'Restore Complete & Verified' : 'بحال شدہ');
           setActiveModal(null);
         } catch (err: any) {
           triggerAlert(err.message);
         }
-      }
+      },
+      language === 'en' ? 'Create Emergency Snapshot & Restore' : 'بحال کریں'
     );
   };
 
   const handleManualExport = async () => {
     try {
-      // Create a safety snapshot on the server first
-      await api.createBackup(language === 'en' ? 'Auto-backup before manual export' : 'فائل ایکسپورٹ سے قبل بیک اپ');
+      await api.createBackup(language === 'en' ? 'Auto-backup before manual export' : 'فائل ایکسپورٹ سے قبل بیک اپ', 'manual');
       
-      // Prepare the downloaded file
       const backupPayload = {
         customers,
         suppliers,
@@ -977,54 +1562,163 @@ export default function App() {
     }
   };
 
-  const handleManualImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleManualImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (user?.role !== 'Owner') {
       triggerAlert(t.roleRestricted);
       return;
     }
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
+
+    const isExcel = file.name.toLowerCase().endsWith('.xlsx');
+
+    if (isExcel) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const parsed = await parseExcelBackupBuffer(arrayBuffer);
+        const integrity = verifyBackupDatasetIntegrity(parsed);
+        if (!integrity.valid) {
+          throw new Error(integrity.error || 'Backup file failed integrity verification.');
+        }
+
+        askConfirm(
+          language === 'en' ? 'Verified Restore from Excel (.xlsx) Backup' : 'ایکسل بیک اپ فائل بحال کریں',
+          language === 'en'
+            ? `Integrity Verified for "${file.name}" (${formatFileSize(file.size)}).\n\nRecords Found:\n• Customers: ${integrity.counts.customers}\n• Suppliers: ${integrity.counts.suppliers}\n• Invoices: ${integrity.counts.invoices}\n• Inventory: ${integrity.counts.inventory}\n\nAn Emergency Pre-Restore Snapshot of your current ledger will be auto-saved before restoring.`
+            : `کیا آپ "${file.name}" سے ڈیٹا بحال کرنا چاہتے ہیں؟ موجودہ کھاتہ پہلے ہنگامی بیک اپ کے طور پر محفوظ کر لیا جائے گا۔`,
+          async () => {
+            try {
+              const res = await api.uploadBackup(parsed, file.name);
+              await fetchAllData();
+              await fetchBackups();
+              triggerAlert(res.message, language === 'en' ? 'Excel Backup Restored & Verified' : 'بحال شدہ');
+              setActiveModal(null);
+            } catch (err: any) {
+              triggerAlert(err.message);
+            }
+          },
+          language === 'en' ? 'Create Emergency Snapshot & Restore' : 'بحال کریں'
+        );
+      } catch (err: any) {
+        triggerAlert(
+          language === 'en'
+            ? 'Failed to parse Excel backup file: ' + err.message
+            : 'ایکسل فائل پڑھنے میں ناکامی: ' + err.message
+        );
+      }
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
         const parsed = JSON.parse(text);
-        if (!parsed.customers || !Array.isArray(parsed.customers)) {
-          throw new Error(language === 'en' ? `Invalid ${BRAND.name} Backup file format` : 'غلط بیک اپ فائل فارمیٹ');
+        const integrity = verifyBackupDatasetIntegrity(parsed);
+        if (!integrity.valid) {
+          throw new Error(integrity.error || 'Backup file failed integrity verification.');
         }
 
         askConfirm(
-          language === 'en' ? 'Import Backup File' : 'بیک اپ فائل امپورٹ کریں',
+          language === 'en' ? 'Verified Import Backup File' : 'بیک اپ فائل امپورٹ کریں',
           language === 'en'
-            ? `Warning: Restoring this backup file will overwrite your current ledger. Current state will be auto-saved so you can undo if needed. Proceed?`
+            ? `Integrity Verified for "${file.name}" (${formatFileSize(file.size)}).\n\nRecords Found:\n• Customers: ${integrity.counts.customers}\n• Suppliers: ${integrity.counts.suppliers}\n• Invoices: ${integrity.counts.invoices}\n• Inventory: ${integrity.counts.inventory}\n\nAn Emergency Pre-Restore Snapshot will be saved automatically before restoring. Proceed?`
             : `وارننگ: یہ فائل اپلوڈ کرنے سے موجودہ کھاتہ بدل جائے گا۔ آپ کا موجودہ کھاتہ خود بخود محفوظ ہو جائے گا تاکہ ضرورت پڑنے پر واپس جا سکیں۔ کیا آپ جاری رکھنا چاہتے ہیں؟`,
           async () => {
             try {
-              const res = await api.uploadBackup(parsed);
-              triggerAlert(res.message, language === 'en' ? 'Imported' : 'کامیابی');
-              fetchAllData();
-              fetchBackups();
+              const res = await api.uploadBackup(parsed, file.name);
+              await fetchAllData();
+              await fetchBackups();
+              triggerAlert(res.message, language === 'en' ? 'Imported & Verified' : 'کامیابی');
               setActiveModal(null);
             } catch (err: any) {
               triggerAlert(err.message);
             }
-          }
+          },
+          language === 'en' ? 'Create Emergency Snapshot & Restore' : 'بحال کریں'
         );
       } catch (err: any) {
         triggerAlert(language === 'en' ? 'Failed to parse file: ' + err.message : 'فائل پارس کرنے میں ناکامی: ' + err.message);
       }
     };
     reader.readAsText(file);
-    // Reset file input target
-    e.target.value = '';
   };
 
   useEffect(() => {
     if (activeModal === 'backups') {
+      setDriveError(null);
       fetchBackups();
+      refreshDriveBackupMetadata();
     }
   }, [activeModal]);
+
+  // Automated Daily Full Backup (once per calendar day) & Change-Driven Hourly Backup
+  useEffect(() => {
+    if (!user || user.role !== 'Owner' || !autoDriveSync) return;
+    const totalRecords =
+      customers.length + suppliers.length + invoices.length + inventory.length;
+    if (totalRecords === 0) return;
+
+    let cancelled = false;
+    const runScheduledBackupCycle = async () => {
+      try {
+        const res = await checkAndRunScheduledBackups({
+          customers,
+          suppliers,
+          invoices,
+          inventory,
+          transactions,
+          cashbook,
+          businessName: user.businessName || BRAND.name
+        });
+        if (cancelled) return;
+        if (res.dailyCreated) {
+          await api.createBackup(
+            `Daily Full Backup (${new Date().toISOString().slice(0, 10)})`,
+            'daily'
+          );
+          setDriveHistoryFiles((prev) => [
+            res.dailyCreated!,
+            ...prev.filter((f) => f.id !== res.dailyCreated!.id && f.name !== res.dailyCreated!.name)
+          ]);
+          setDriveLastSync(new Date().toISOString());
+          setDriveLastModule(`Automated Daily Full Backup (${res.dailyCreated.name})`);
+        }
+        if (res.hourlyCreated) {
+          await api.createBackup(
+            `Hourly Change Snapshot (${new Date().toISOString().slice(0, 13).replace('T', ' ')}:00)`,
+            'hourly'
+          );
+          setDriveHistoryFiles((prev) => [
+            res.hourlyCreated!,
+            ...prev.filter((f) => f.id !== res.hourlyCreated!.id && f.name !== res.hourlyCreated!.name)
+          ]);
+          setDriveLastSync(new Date().toISOString());
+          setDriveLastModule(`Automated Hourly Snapshot (${res.hourlyCreated.name})`);
+        }
+      } catch (err) {
+        console.warn('Scheduled backup check skipped:', err);
+      }
+    };
+
+    const timer = setTimeout(runScheduledBackupCycle, 4000);
+    const interval = setInterval(runScheduledBackupCycle, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [
+    user,
+    autoDriveSync,
+    customers.length,
+    suppliers.length,
+    invoices.length,
+    inventory.length,
+    transactions.length,
+    cashbook.length
+  ]);
 
   // Compose dynamic WhatsApp links with debt reminder template!
   const getWhatsAppLink = (customerName: string, phone: string, balance: number) => {
@@ -1268,7 +1962,7 @@ export default function App() {
           <div className="flex-1 bg-[#FAF9F6] dark:bg-zinc-950 flex flex-col min-w-0">
             {/* Top Deep Emerald & Forest Green Fintech Header */}
             <header className="bg-meezan-header text-white sticky top-0 z-40 shadow-md border-b border-emerald-900/40">
-              <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-3 pb-2">
+              <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-6 sm:pt-5 sm:pb-7">
                 <div className="flex justify-between items-center gap-2">
                   {/* Left: Mobile Hamburger + Back Button + Brand Title */}
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1288,6 +1982,13 @@ export default function App() {
                         onClick={() => {
                           if (selectedCustomerId !== null) {
                             setSelectedCustomerId(null);
+                          } else if (
+                            activeTab === 'customers' ||
+                            activeTab === 'suppliers' ||
+                            activeTab === 'invoices' ||
+                            activeTab === 'inventory'
+                          ) {
+                            setActiveTab('business-operations');
                           } else {
                             setActiveTab('dashboard');
                           }
@@ -1306,18 +2007,18 @@ export default function App() {
                         <h1 className="text-lg sm:text-xl font-black text-white tracking-tight truncate leading-none">
                           {activeTab === 'dashboard'
                             ? (language === 'en' ? `${BRAND.name} Dashboard` : 'میزان فلو ڈیش بورڈ')
-                            : activeTab === 'invoices'
-                            ? (language === 'en' ? 'Sales & Invoices' : 'فروخت اور بلز')
-                            : activeTab === 'inventory'
-                            ? (language === 'en' ? 'Products & Inventory' : 'مصنوعات اور اسٹاک')
+                            : activeTab === 'business-operations'
+                            ? (language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز')
                             : activeTab === 'customers'
-                            ? (language === 'en' ? 'Customer Accounts' : 'گاہک کھاتہ')
+                            ? (language === 'en' ? 'Business Operations • Customers' : 'کاروباری آپریشنز • گاہک کھاتے')
                             : activeTab === 'suppliers'
-                            ? (language === 'en' ? 'Supplier Accounts' : 'سپلائر کھاتہ')
+                            ? (language === 'en' ? 'Business Operations • Suppliers' : 'کاروباری آپریشنز • سپلائرز')
+                            : activeTab === 'invoices'
+                            ? (language === 'en' ? 'Business Operations • Invoices' : 'کاروباری آپریشنز • انوائسز / بلز')
+                            : activeTab === 'inventory'
+                            ? (language === 'en' ? 'Business Operations • Inventory' : 'کاروباری آپریشنز • اسٹاک / انوینٹری')
                             : activeTab === 'cashbook'
                             ? (language === 'en' ? 'Payments & Transactions' : 'ادائیگیاں اور لین دین')
-                            : activeTab === 'reports'
-                            ? (language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات')
                             : (language === 'en' ? 'Settings & Preferences' : 'ترتیبات')}
                         </h1>
                       </div>
@@ -1334,7 +2035,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveTab('reports');
+                        setActiveTab('dashboard');
                         setSelectedCustomerId(null);
                         setTimeout(() => {
                           const el = document.getElementById('debt-summary-section');
@@ -1359,6 +2060,56 @@ export default function App() {
                       >
                         <Download className="h-3.5 w-3.5" />
                         <span>{t.installApp}</span>
+                      </button>
+                    )}
+
+                    {/* Google Drive & Excel Backup Synchronization Status Button */}
+                    {user.role === 'Owner' && (
+                      <button
+                        type="button"
+                        id="header-drive-backup-status-btn"
+                        onClick={() => setActiveModal('backups')}
+                        title={
+                          driveError
+                            ? `Backup Sync Error: ${driveError}`
+                            : driveLastSync
+                              ? `Last Drive Sync: ${new Date(driveLastSync).toLocaleString()}`
+                              : 'Open Google Drive & Excel Backup Hub'
+                        }
+                        className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] font-extrabold border transition-all cursor-pointer ${
+                          driveSyncStatus === 'error'
+                            ? 'bg-red-500/25 border-red-300/60 text-red-100 hover:bg-red-500/35'
+                            : driveSyncStatus === 'syncing'
+                              ? 'bg-amber-500/25 border-amber-300/50 text-amber-100'
+                              : isDriveConnected
+                                ? 'bg-emerald-500/20 border-emerald-300/40 text-emerald-100 hover:bg-emerald-500/30'
+                                : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                        }`}
+                      >
+                        {driveSyncStatus === 'syncing' ? (
+                          <RefreshCw className="h-3.5 w-3.5 text-[#D4AF37] animate-spin shrink-0" />
+                        ) : driveSyncStatus === 'error' ? (
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-300 shrink-0" />
+                        ) : (
+                          <Cloud className="h-3.5 w-3.5 text-[#D4AF37] shrink-0" />
+                        )}
+                        <span className="hidden md:inline">
+                          {driveSyncStatus === 'syncing'
+                            ? language === 'en'
+                              ? 'Syncing .xlsx...'
+                              : 'بیک اپ سنک...'
+                            : driveSyncStatus === 'error'
+                              ? language === 'en'
+                                ? 'Backup Error!'
+                                : 'بیک اپ خرابی'
+                              : isDriveConnected
+                                ? language === 'en'
+                                  ? 'Drive Synced'
+                                  : 'ڈرائیو محفوظ'
+                                : language === 'en'
+                                  ? 'Drive Backup'
+                                  : 'ڈرائیو بیک اپ'}
+                        </span>
                       </button>
                     )}
 
@@ -1393,129 +2144,93 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                {/* Top Category Tabs Row */}
-                <div className="flex items-center justify-between sm:justify-start sm:gap-6 mt-3 pt-1 overflow-x-auto no-scrollbar border-b border-white/10">
-                  {[
-                    { id: 'dashboard', label: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ' },
-                    { id: 'invoices', label: language === 'en' ? 'Sales' : 'فروخت' },
-                    { id: 'inventory', label: language === 'en' ? 'Products' : 'مصنوعات' },
-                    { id: 'customers', label: language === 'en' ? 'Customers' : 'گاہک' },
-                    { id: 'suppliers', label: language === 'en' ? 'Suppliers' : 'سپلائرز' },
-                    { id: 'cashbook', label: language === 'en' ? 'Payments' : 'ادائیگیاں' },
-                    { id: 'reports', label: language === 'en' ? 'Reports' : 'رپورٹس' },
-                    { id: 'settings', label: language === 'en' ? 'Settings' : 'ترتیبات' },
-                  ].map((tabItem) => {
-                    const isActive = activeTab === tabItem.id;
-                    return (
-                      <button
-                        key={tabItem.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveTab(tabItem.id as AppTab);
-                          setSearchTerm('');
-                          setFilterOption('all');
-                          if (tabItem.id === 'customers') {
-                            setSelectedCustomerId(null);
-                          }
-                        }}
-                        className={`relative pb-2.5 px-2 text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer ${
-                          isActive ? 'text-white' : 'text-emerald-100/70 hover:text-white'
-                        }`}
-                      >
-                        <span className="tracking-wide">{tabItem.label}</span>
-                        {isActive && (
-                          <motion.span
-                            layoutId="headerTabUnderline"
-                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4AF37] rounded-t-full shadow-[0_-1px_6px_rgba(212,175,55,0.8)]"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             </header>
 
-            {/* White Balance Summary Card (shown on non-dashboard views when not inside a specific customer folder) */}
-            {selectedCustomerId === null && activeTab !== 'dashboard' && activeTab !== 'settings' && (
-              <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 mt-3 sm:mt-4 mb-2 relative z-20">
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl shadow-[0_8px_30px_rgba(4,47,36,0.08)] border border-slate-200/80 dark:border-zinc-800 px-4 sm:px-6 py-3.5"
-                >
-                  {/* Top Bar: Total Customer Accounts + Hide Balance Toggle */}
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-zinc-400">
-                      <Users className="h-3.5 w-3.5 text-[#059669]" />
-                      <span>
-                        {language === 'en'
-                          ? `${customers.length} Customer Accounts • ${suppliers.length} Suppliers`
-                          : `${customers.length} گاہک کھاتے • ${suppliers.length} سپلائرز`}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setHideBalance((prev) => !prev)}
-                      className="inline-flex items-center gap-1.5 text-xs font-extrabold cursor-pointer select-none text-slate-600 dark:text-zinc-400 hover:text-[#059669] transition-colors"
-                    >
-                      {hideBalance ? (
-                        <Eye className="h-3.5 w-3.5 stroke-[2.2]" />
-                      ) : (
-                        <EyeOff className="h-3.5 w-3.5 stroke-[2.2]" />
-                      )}
-                      <span>
-                        {hideBalance
-                          ? (language === 'en' ? 'Show Balance' : 'بیلنس دکھائیں')
-                          : (language === 'en' ? 'Hide Balance' : 'بیلنس چھپائیں')}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Two Equal Columns with Vertical Divider + Right Chevron */}
-                  <div className="flex items-center justify-between">
-                    <div className="grid grid-cols-2 flex-1 divide-x divide-slate-200 dark:divide-zinc-800">
-                      {/* Left Column: You will give (Payables) */}
-                      <div
-                        onClick={() => setActiveTab('suppliers')}
-                        className="pr-3 sm:pr-6 flex flex-col items-center justify-center text-center cursor-pointer group"
+            {/* Business Operations Hierarchy Breadcrumb & Sub-Navigation Bar */}
+            {selectedCustomerId === null &&
+              (activeTab === 'customers' ||
+                activeTab === 'suppliers' ||
+                activeTab === 'invoices' ||
+                activeTab === 'inventory') && (
+                <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 mt-3 sm:mt-4 mb-1 relative z-20">
+                  <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xs border border-slate-200/80 dark:border-zinc-800 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs font-extrabold text-slate-600 dark:text-zinc-300 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('dashboard')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-950 dark:hover:bg-zinc-800 text-xs font-extrabold text-slate-700 dark:text-zinc-200 hover:text-[#059669] dark:hover:text-[#D4AF37] transition-colors cursor-pointer"
                       >
-                        <span className="text-lg sm:text-2xl font-black text-payable-green dark:text-emerald-400 tracking-tight tabular-nums font-mono group-hover:scale-[1.02] transition-transform">
-                          {hideBalance ? 'Rs ••••' : `Rs ${(stats?.payables || 0).toLocaleString()}`}
-                        </span>
-                        <span className="text-xs sm:text-xs font-bold text-slate-500 dark:text-zinc-400 mt-0.5">
-                          {language === 'en' ? 'You will give (Payables)' : 'آپ نے دینے ہیں'}
-                        </span>
-                      </div>
-
-                      {/* Right Column: You will get (Receivables) */}
-                      <div
-                        onClick={() => setActiveTab('customers')}
-                        className="pl-3 sm:pl-6 flex flex-col items-center justify-center text-center cursor-pointer group"
+                        <ArrowLeft className="h-3.5 w-3.5 text-[#059669]" />
+                        <span>{language === 'en' ? 'View Dashboard' : 'ڈیش بورڈ دیکھیں'}</span>
+                      </button>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('business-operations')}
+                        className="inline-flex items-center gap-1.5 text-[#064E3B] dark:text-emerald-400 hover:underline cursor-pointer"
                       >
-                        <span className="text-lg sm:text-2xl font-black text-receivable-maroon dark:text-rose-400 tracking-tight tabular-nums font-mono group-hover:scale-[1.02] transition-transform">
-                          {hideBalance ? 'Rs ••••' : `Rs ${(stats?.receivables || 0).toLocaleString()}`}
-                        </span>
-                        <span className="text-xs sm:text-xs font-bold text-slate-500 dark:text-zinc-400 mt-0.5">
-                          {language === 'en' ? 'You will get (Receivables)' : 'آپ نے لینے ہیں'}
-                        </span>
-                      </div>
+                        <Briefcase className="h-3.5 w-3.5 text-[#059669] dark:text-[#D4AF37]" />
+                        <span>{language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز'}</span>
+                      </button>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-[#064E3B] dark:text-[#D4AF37] border border-emerald-200/70 dark:border-emerald-800/60">
+                        {activeTab === 'customers'
+                          ? language === 'en'
+                            ? 'Customers'
+                            : 'گاہک کھاتے'
+                          : activeTab === 'suppliers'
+                          ? language === 'en'
+                            ? 'Suppliers'
+                            : 'سپلائرز'
+                          : activeTab === 'invoices'
+                          ? language === 'en'
+                            ? 'Invoices'
+                            : 'انوائسز / بلز'
+                          : language === 'en'
+                          ? 'Inventory'
+                          : 'اسٹاک / انوینٹری'}
+                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('dashboard')}
-                      aria-label="View full summary"
-                      className="p-1.5 text-slate-600 dark:text-zinc-300 hover:bg-emerald-50 dark:hover:bg-zinc-800 hover:text-[#059669] rounded-full transition-colors cursor-pointer shrink-0 ml-1"
-                    >
-                      <ChevronRight className="h-5 w-5 stroke-[2.5]" />
-                    </button>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                      {(
+                        [
+                          { id: 'customers' as AppTab, label: language === 'en' ? 'Customers' : 'گاہک', icon: Users },
+                          { id: 'suppliers' as AppTab, label: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
+                          { id: 'invoices' as AppTab, label: language === 'en' ? 'Invoices' : 'انوائسز', icon: FileText },
+                          { id: 'inventory' as AppTab, label: language === 'en' ? 'Inventory' : 'اسٹاک', icon: Package }
+                        ] as const
+                      ).map((mod) => {
+                        const ModIcon = mod.icon;
+                        const isActiveMod = activeTab === mod.id;
+                        return (
+                          <button
+                            key={mod.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(mod.id);
+                              setSearchTerm('');
+                              setFilterOption('all');
+                              if (mod.id === 'customers') {
+                                setSelectedCustomerId(null);
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+                              isActiveMod
+                                ? 'bg-meezan-btn text-white shadow-2xs'
+                                : 'bg-slate-50 dark:bg-zinc-950 text-slate-600 dark:text-zinc-400 hover:bg-emerald-50/60 dark:hover:bg-zinc-800 border border-slate-200/70 dark:border-zinc-800'
+                            }`}
+                          >
+                            <ModIcon className={`h-3.5 w-3.5 ${isActiveMod ? 'text-[#D4AF37]' : 'text-[#059669]'}`} />
+                            <span>{mod.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </motion.div>
-              </div>
-            )}
+                </div>
+              )}
 
             {/* Mobile Slide-Over Navigation Drawer (< md) */}
             <AnimatePresence>
@@ -1568,54 +2283,87 @@ export default function App() {
                         {[
                           { id: 'dashboard', name: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ', icon: TrendingUp },
                           {
-                            id: 'inventory-invoices-group',
-                            name: language === 'en' ? 'Inventory & Invoices' : 'اسٹاک اور انوائسز',
-                            icon: ShoppingBag,
+                            id: 'business-operations',
+                            name: language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز',
+                            icon: Briefcase,
                             children: [
-                              { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package },
-                              { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText }
+                              { id: 'customers' as AppTab, name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
+                              { id: 'suppliers' as AppTab, name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
+                              { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText },
+                              { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package }
                             ]
                           },
-                          { id: 'customers', name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
-                          { id: 'suppliers', name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
                           { id: 'cashbook', name: language === 'en' ? 'Payments / Transactions' : 'ادائیگیاں اور لین دین', icon: Wallet },
-                          { id: 'reports', name: language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات', icon: BarChart3 },
                           { id: 'settings', name: language === 'en' ? 'Settings' : 'ترتیبات', icon: Settings }
                         ].map((item) => {
                           const IconComponent = item.icon;
 
                           if ('children' in item && item.children) {
-                            const isChildActive = activeTab === 'inventory' || activeTab === 'invoices';
-                            const isExpanded = isInvMenuOpen || isChildActive;
+                            const isParentSelected = activeTab === 'business-operations';
+                            const isChildActive =
+                              activeTab === 'customers' ||
+                              activeTab === 'suppliers' ||
+                              activeTab === 'invoices' ||
+                              activeTab === 'inventory';
+                            const isExpanded = isInvMenuOpen || isParentSelected || isChildActive;
 
                             return (
                               <div key={`drawer-${item.id}`} className="space-y-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setIsInvMenuOpen((prev) => !prev)}
-                                  className={`flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
-                                    isChildActive
+                                <div
+                                  className={`flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs font-extrabold rounded-xl w-full text-left transition-all ${
+                                    isParentSelected
+                                      ? 'bg-meezan-btn text-white shadow-xs'
+                                      : isChildActive
                                       ? 'bg-emerald-50/90 dark:bg-emerald-950/40 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/50'
                                       : 'text-slate-600 dark:text-zinc-400 hover:bg-emerald-50/60 dark:hover:bg-zinc-800'
                                   }`}
                                 >
-                                  <span className="flex items-center gap-3 min-w-0">
-                                    <IconComponent className={`h-4 w-4 shrink-0 ${isChildActive ? 'text-[#059669]' : 'text-[#059669]'}`} />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab('business-operations');
+                                      setIsInvMenuOpen(true);
+                                      setSelectedCustomerId(null);
+                                      setSearchTerm('');
+                                      setFilterOption('all');
+                                      setIsMobileMenuOpen(false);
+                                    }}
+                                    className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                                  >
+                                    <IconComponent
+                                      className={`h-4 w-4 shrink-0 ${
+                                        isParentSelected ? 'text-[#D4AF37]' : 'text-[#059669]'
+                                      }`}
+                                    />
                                     <span className="truncate">{item.name}</span>
-                                  </span>
-                                  <span className="flex items-center gap-1.5 shrink-0">
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsInvMenuOpen((prev) => !prev);
+                                    }}
+                                    aria-label="Toggle Business Operations submenu"
+                                    className="flex items-center gap-1.5 shrink-0 p-0.5 cursor-pointer"
+                                  >
                                     {lowStockItems.length > 0 && (
                                       <span className="bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                                         {lowStockItems.length}
                                       </span>
                                     )}
                                     <ChevronDown
-                                      className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
-                                        isExpanded ? 'rotate-180 text-[#059669]' : ''
+                                      className={`h-4 w-4 transition-transform duration-200 ${
+                                        isExpanded
+                                          ? isParentSelected
+                                            ? 'rotate-180 text-[#D4AF37]'
+                                            : 'rotate-180 text-[#059669]'
+                                          : isParentSelected
+                                          ? 'text-white/80'
+                                          : 'text-slate-400'
                                       }`}
                                     />
-                                  </span>
-                                </button>
+                                  </button>
+                                </div>
 
                                 <AnimatePresence initial={false}>
                                   {isExpanded && (
@@ -1637,6 +2385,9 @@ export default function App() {
                                               onClick={() => {
                                                 setActiveTab(sub.id);
                                                 setIsInvMenuOpen(true);
+                                                if (sub.id === 'customers') {
+                                                  setSelectedCustomerId(null);
+                                                }
                                                 setSearchTerm('');
                                                 setFilterOption('all');
                                                 setIsMobileMenuOpen(false);
@@ -1678,9 +2429,6 @@ export default function App() {
                                 setActiveTab(item.id as AppTab);
                                 setSearchTerm('');
                                 setFilterOption('all');
-                                if (item.id === 'customers') {
-                                  setSelectedCustomerId(null);
-                                }
                                 setIsMobileMenuOpen(false);
                               }}
                               className={`flex items-center gap-3 px-3.5 py-2.5 text-xs font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
@@ -1785,60 +2533,73 @@ export default function App() {
           {[
             { id: 'dashboard', name: language === 'en' ? 'Dashboard' : 'ڈیش بورڈ', icon: TrendingUp },
             {
-              id: 'inventory-invoices-group',
-              name: language === 'en' ? 'Inventory & Invoices' : 'اسٹاک اور انوائسز',
-              icon: ShoppingBag,
+              id: 'business-operations',
+              name: language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز',
+              icon: Briefcase,
               children: [
-                { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package },
-                { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText }
+                { id: 'customers' as AppTab, name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
+                { id: 'suppliers' as AppTab, name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
+                { id: 'invoices' as AppTab, name: language === 'en' ? 'Invoices' : 'انوائسز / بلز', icon: FileText },
+                { id: 'inventory' as AppTab, name: language === 'en' ? 'Inventory' : 'اسٹاک / انوینٹری', icon: Package }
               ]
             },
-            { id: 'customers', name: language === 'en' ? 'Customers' : 'گاہک کھاتے', icon: Users },
-            { id: 'suppliers', name: language === 'en' ? 'Suppliers' : 'سپلائرز', icon: Truck },
             { id: 'cashbook', name: language === 'en' ? 'Payments / Transactions' : 'ادائیگیاں اور لین دین', icon: Wallet },
-            { id: 'reports', name: language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیات', icon: BarChart3 },
             { id: 'settings', name: language === 'en' ? 'Settings' : 'ترتیبات', icon: Settings }
           ].map((item) => {
             const IconComponent = item.icon;
 
             if ('children' in item && item.children) {
-              const isChildActive = activeTab === 'inventory' || activeTab === 'invoices';
-              const isExpanded = isInvMenuOpen || isChildActive;
+              const isParentSelected = activeTab === 'business-operations';
+              const isChildActive =
+                activeTab === 'customers' ||
+                activeTab === 'suppliers' ||
+                activeTab === 'invoices' ||
+                activeTab === 'inventory';
+              const isExpanded = isInvMenuOpen || isParentSelected || isChildActive;
 
               return (
                 <div key={item.id} className="space-y-1">
-                  <motion.button
-                    whileHover={{ x: isSidebarCollapsed ? 0 : 2 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="button"
-                    title={item.name}
-                    onClick={() => {
-                      if (isSidebarCollapsed) {
-                        setIsSidebarCollapsed(false);
-                        setIsInvMenuOpen(true);
-                      } else {
-                        setIsInvMenuOpen((prev) => !prev);
-                      }
-                    }}
+                  <div
                     className={`relative flex items-center ${
-                      isSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'justify-between gap-3 px-4 py-2.5'
-                    } text-xs lg:text-sm font-extrabold rounded-xl w-full text-left transition-all cursor-pointer ${
-                      isChildActive
+                      isSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'justify-between gap-2 px-4 py-2.5'
+                    } text-xs lg:text-sm font-extrabold rounded-xl w-full text-left transition-all ${
+                      isParentSelected
+                        ? 'bg-meezan-btn text-white shadow-sm'
+                        : isChildActive
                         ? 'bg-emerald-50/90 dark:bg-emerald-950/40 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs'
                         : 'text-slate-700 dark:text-zinc-400 hover:text-[#064E3B] dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-zinc-900 border border-transparent'
                     }`}
                   >
-                    <span className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      title={item.name}
+                      onClick={() => {
+                        setActiveTab('business-operations');
+                        setIsInvMenuOpen(true);
+                        setSelectedCustomerId(null);
+                        setSearchTerm('');
+                        setFilterOption('all');
+                      }}
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                    >
                       <IconComponent
                         className={`h-[18px] w-[18px] shrink-0 ${
-                          isChildActive ? 'text-[#059669]' : 'text-[#059669]'
+                          isParentSelected ? 'text-[#D4AF37]' : 'text-[#059669]'
                         }`}
                       />
                       {!isSidebarCollapsed && <span className="truncate">{item.name}</span>}
-                    </span>
+                    </button>
 
                     {!isSidebarCollapsed ? (
-                      <span className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsInvMenuOpen((prev) => !prev);
+                        }}
+                        aria-label="Toggle Business Operations submenu"
+                        className="flex items-center gap-1.5 shrink-0 p-0.5 cursor-pointer"
+                      >
                         {lowStockItems.length > 0 && (
                           <span className="bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                             {lowStockItems.length}
@@ -1846,10 +2607,16 @@ export default function App() {
                         )}
                         <ChevronDown
                           className={`h-4 w-4 transition-transform duration-200 ${
-                            isExpanded ? 'rotate-180 text-[#059669]' : 'text-slate-400'
+                            isExpanded
+                              ? isParentSelected
+                                ? 'rotate-180 text-[#D4AF37]'
+                                : 'rotate-180 text-[#059669]'
+                              : isParentSelected
+                              ? 'text-white/80'
+                              : 'text-slate-400'
                           }`}
                         />
-                      </span>
+                      </button>
                     ) : (
                       lowStockItems.length > 0 && (
                         <span className="absolute top-1.5 right-1.5 bg-red-500 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -1857,7 +2624,7 @@ export default function App() {
                         </span>
                       )
                     )}
-                  </motion.button>
+                  </div>
 
                   <AnimatePresence initial={false}>
                     {isExpanded && (
@@ -1890,6 +2657,9 @@ export default function App() {
                                 onClick={() => {
                                   setActiveTab(sub.id);
                                   setIsInvMenuOpen(true);
+                                  if (sub.id === 'customers') {
+                                    setSelectedCustomerId(null);
+                                  }
                                   setSearchTerm('');
                                   setFilterOption('all');
                                 }}
@@ -1942,9 +2712,6 @@ export default function App() {
                   setActiveTab(item.id as AppTab);
                   setSearchTerm('');
                   setFilterOption('all');
-                  if (item.id === 'customers') {
-                    setSelectedCustomerId(null);
-                  }
                 }}
                 className={`relative flex items-center ${
                   isSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-4 py-2.5'
@@ -2058,6 +2825,308 @@ export default function App() {
             />
           )}
 
+          {/* 1B. DEDICATED BUSINESS OPERATIONS PAGE (4 Separate Cards: Customers, Suppliers, Invoices, Inventory) */}
+          {activeTab === 'business-operations' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-6 pb-8"
+            >
+              {/* Business Operations Header Card */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 sm:p-6 border border-slate-200/90 dark:border-zinc-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-4 min-w-0">
+                  <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-meezan-header text-[#D4AF37] flex items-center justify-center shrink-0 shadow-xs">
+                    <Briefcase className="h-6 w-6 sm:h-7 sm:w-7" />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                        {language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز'}
+                      </h2>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-[#064E3B] dark:text-[#D4AF37] border border-emerald-200/80 dark:border-emerald-800/60">
+                        {user.businessName}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium">
+                      {language === 'en'
+                        ? 'Select a module below to manage Customers, Suppliers, Invoices, or Inventory.'
+                        : 'گاہک کھاتے، سپلائرز، انوائسز یا اسٹاک منظم کرنے کے لیے نیچے مطلوبہ شعبہ منتخب کریں۔'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-950 dark:hover:bg-zinc-800 text-xs font-extrabold text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer self-start sm:self-center shrink-0"
+                >
+                  <ArrowLeft className="h-4 w-4 text-[#059669]" />
+                  <span>{language === 'en' ? 'View Dashboard' : 'ڈیش بورڈ دیکھیں'}</span>
+                </button>
+              </div>
+
+              {/* 4 Separate Business Operations Cards Grid: 1. Customers, 2. Suppliers, 3. Invoices, 4. Inventory */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* 1. Customers Card */}
+                <motion.div
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
+                    setSelectedCustomerId(null);
+                    setSearchTerm('');
+                    setFilterOption('all');
+                    setActiveTab('customers');
+                  }}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-slate-200/90 dark:border-zinc-800 hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 group-hover:bg-[#064E3B] text-[#059669] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors shrink-0">
+                        <Users className="h-6 w-6" />
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/60 dark:border-zinc-700">
+                        {customers.length} {language === 'en' ? 'Accounts' : 'کھاتے'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span>{language === 'en' ? 'Customers' : 'گاہک کھاتے (Customers)'}</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
+                        {language === 'en'
+                          ? 'Manage customer credit folders, record Udhaar & payments, and share WhatsApp/PDF ledger statements.'
+                          : 'گاہکوں کے ادھار کھاتے، نقد وصولیاں اور واٹس ایپ پی ڈی ایف اسٹیٹمنٹس منظم کریں۔'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-500 dark:text-zinc-400">
+                        {language === 'en' ? 'Total Receivables (You will get)' : 'کل واجب الوصول (آپ نے لینے ہیں)'}
+                      </span>
+                      <span className="font-mono font-black text-receivable-maroon dark:text-amber-400 text-sm">
+                        {hideBalance ? 'Rs ••••' : `Rs ${(stats?.receivables || 0).toLocaleString()}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveModal('customer');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#064E3B] dark:text-emerald-300 text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{language === 'en' ? 'Add Customer' : 'نیا گاہک'}</span>
+                    </button>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform">
+                      <span>{language === 'en' ? 'Open Customers' : 'گاہک کھاتے کھولیں'}</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </motion.div>
+
+                {/* 2. Suppliers Card */}
+                <motion.div
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterOption('all');
+                    setActiveTab('suppliers');
+                  }}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-slate-200/90 dark:border-zinc-800 hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 group-hover:bg-[#064E3B] text-[#059669] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors shrink-0">
+                        <Truck className="h-6 w-6" />
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/60 dark:border-zinc-700">
+                        {suppliers.length} {language === 'en' ? 'Suppliers' : 'سپلائرز'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span>{language === 'en' ? 'Suppliers' : 'سپلائرز (Suppliers)'}</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
+                        {language === 'en'
+                          ? 'Maintain wholesale vendor directories, track supplier payables, and manage stock purchase balances.'
+                          : 'ہول سیل سپلائرز کا ریکارڈ رکھیں اور واجب الادا رقوم و بلز کی تفصیلات منظم کریں۔'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-500 dark:text-zinc-400">
+                        {language === 'en' ? 'Total Payables (You will give)' : 'کل واجب الادا (آپ نے دینے ہیں)'}
+                      </span>
+                      <span className="font-mono font-black text-payable-green dark:text-emerald-400 text-sm">
+                        {hideBalance ? 'Rs ••••' : `Rs ${(stats?.payables || 0).toLocaleString()}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveModal('supplier');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#064E3B] dark:text-emerald-300 text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{language === 'en' ? 'Add Supplier' : 'نیا سپلائر'}</span>
+                    </button>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform">
+                      <span>{language === 'en' ? 'Open Suppliers' : 'سپلائرز کھولیں'}</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </motion.div>
+
+                {/* 3. Invoices Card */}
+                <motion.div
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterOption('all');
+                    setActiveTab('invoices');
+                  }}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-slate-200/90 dark:border-zinc-800 hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 group-hover:bg-[#064E3B] text-[#059669] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors shrink-0">
+                        <FileText className="h-6 w-6" />
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/60 dark:border-zinc-700">
+                        {invoices.length} {language === 'en' ? 'Invoices' : 'بلز'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span>{language === 'en' ? 'Invoices' : 'انوائسز اور بلز (Invoices)'}</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
+                        {language === 'en'
+                          ? 'Create itemized sales bills, print customer receipts, and track paid or credit invoices.'
+                          : 'تفصیلی سیلز بل بنائیں، رسیدیں پرنٹ کریں اور نقد یا ادھار بلوں کا ریکارڈ رکھیں۔'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-500 dark:text-zinc-400">
+                        {language === 'en' ? 'Invoice Settlement Status' : 'بلوں کی صورتحال'}
+                      </span>
+                      <span className="font-mono font-extrabold text-slate-900 dark:text-white">
+                        {invoices.filter((i) => i.isPaid).length} {language === 'en' ? 'Paid' : 'ادا شدہ'} •{' '}
+                        {invoices.filter((i) => !i.isPaid).length} {language === 'en' ? 'Unpaid' : 'باقی'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveModal('invoice');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#064E3B] dark:text-emerald-300 text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{language === 'en' ? 'Create Invoice' : 'نیا بل بنائیں'}</span>
+                    </button>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform">
+                      <span>{language === 'en' ? 'Open Invoices' : 'انوائسز کھولیں'}</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </motion.div>
+
+                {/* 4. Inventory Card */}
+                <motion.div
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterOption('all');
+                    setActiveTab('inventory');
+                  }}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-slate-200/90 dark:border-zinc-800 hover:border-[#059669]/60 dark:hover:border-[#D4AF37]/50 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 group-hover:bg-[#064E3B] text-[#059669] dark:text-emerald-400 group-hover:text-[#D4AF37] flex items-center justify-center transition-colors shrink-0">
+                        <Package className="h-6 w-6" />
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 dark:bg-zinc-800 text-[#064E3B] dark:text-emerald-300 border border-emerald-200/60 dark:border-zinc-700">
+                        {inventory.length} {language === 'en' ? 'Products' : 'مصنوعات'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span>{language === 'en' ? 'Inventory' : 'اسٹاک اور انوینٹری (Inventory)'}</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
+                        {language === 'en'
+                          ? 'Monitor product stock quantities, SKU unit prices, categories, and automatic low-stock alerts.'
+                          : 'دکان کا اسٹاک، قیمتیں، یونٹس اور کم ہونے والی مصنوعات کے الرٹس منظم کریں۔'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200/70 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-500 dark:text-zinc-400">
+                        {language === 'en' ? 'Stock Health Status' : 'اسٹاک کی صورتحال'}
+                      </span>
+                      {lowStockItems.length > 0 ? (
+                        <span className="font-mono font-extrabold text-rose-600 dark:text-rose-400">
+                          {lowStockItems.length} {language === 'en' ? 'Low Stock Alert' : 'کم اسٹاک الرٹ'}
+                        </span>
+                      ) : (
+                        <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {language === 'en' ? 'All Stock Healthy' : 'اسٹاک مکمل ہے'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-5 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveModal('inventory');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#064E3B] dark:text-emerald-300 text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{language === 'en' ? 'Add Product' : 'نئی مصنوعات'}</span>
+                    </button>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-extrabold text-[#059669] dark:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform">
+                      <span>{language === 'en' ? 'Open Inventory' : 'اسٹاک کھولیں'}</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+
           {/* 2. CUSTOMERS TAB (Customer Folder System) */}
           {activeTab === 'customers' && (
             <CustomerFolderSystem
@@ -2073,6 +3142,7 @@ export default function App() {
                 try {
                   const created = await api.createCustomer(payload);
                   await fetchAllData();
+                  triggerAutoDriveModuleBackup('customers', false);
                   if (created && created.id) {
                     setSelectedCustomerId(created.id);
                   }
@@ -2085,6 +3155,7 @@ export default function App() {
                 try {
                   await api.updateCustomer(id, payload);
                   await fetchAllData();
+                  triggerAutoDriveModuleBackup('customers', false);
                 } catch (err: any) {
                   triggerAlert(err.message);
                   throw err;
@@ -2095,6 +3166,7 @@ export default function App() {
                 try {
                   await api.createTransaction(payload);
                   await fetchAllData();
+                  triggerAutoDriveModuleBackup('customers', false);
                 } catch (err: any) {
                   triggerAlert(err.message);
                   throw err;
@@ -2104,6 +3176,7 @@ export default function App() {
                 try {
                   await api.updateTransaction(id, payload);
                   await fetchAllData();
+                  triggerAutoDriveModuleBackup('customers', false);
                 } catch (err: any) {
                   triggerAlert(err.message);
                   throw err;
@@ -2910,142 +3983,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* 7. REPORTS & ANALYTICS TAB */}
-          {activeTab === 'reports' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-5"
-            >
-              {/* Reports Header & Customer PDF Statement Generator */}
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 mb-1.5">
-                    <BarChart3 className="h-3.5 w-3.5 text-[#059669]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#064E3B] dark:text-emerald-300">
-                      {language === 'en' ? 'Financial Intelligence & Statements' : 'مالیاتی رپورٹس اور تجزیہ'}
-                    </span>
-                  </div>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {language === 'en' ? 'Reports & Analytics' : 'رپورٹس اور تجزیہ'}
-                  </h2>
-                  <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {language === 'en'
-                      ? 'Analyze sales vs expenses, monitor debt aging, and export full PDF customer statements.'
-                      : 'آمدنی، اخراجات اور بقایاجات کا مکمل تجزیہ کریں اور پی ڈی ایف اسٹیٹمنٹ ڈاؤن لوڈ کریں۔'}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {customers.length > 0 && (
-                    <select
-                      defaultValue=""
-                      onChange={(e) => {
-                        const found = customers.find((c) => c.id === e.target.value);
-                        if (found) {
-                          setDashboardReportCustomer(found);
-                          e.target.value = '';
-                        }
-                      }}
-                      className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-extrabold text-slate-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#059669] cursor-pointer"
-                    >
-                      <option value="" disabled>
-                        {language === 'en' ? '📄 Generate Customer PDF Statement...' : '📄 گاہک کی پی ڈی ایف رپورٹ بنائیں...'}
-                      </option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} (Rs {Math.abs(c.balance).toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleManualExport}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-meezan-btn text-white text-xs font-black tracking-wider uppercase shadow-sm cursor-pointer"
-                  >
-                    <Download className="h-3.5 w-3.5 text-[#D4AF37]" />
-                    <span>{language === 'en' ? 'Export Full Ledger' : 'ڈیٹا ایکسپورٹ کریں'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Executive Summary KPI Row */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {language === 'en' ? 'Total Receivables' : 'کل لینے ہیں'}
-                  </p>
-                  <p className="text-lg sm:text-xl font-black font-mono text-receivable-maroon dark:text-rose-400 mt-1 tabular-nums">
-                    {hideBalance ? 'Rs ••••' : `Rs ${stats.receivables.toLocaleString()}`}
-                  </p>
-                </div>
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {language === 'en' ? 'Total Payables' : 'کل دینے ہیں'}
-                  </p>
-                  <p className="text-lg sm:text-xl font-black font-mono text-payable-green dark:text-emerald-400 mt-1 tabular-nums">
-                    {hideBalance ? 'Rs ••••' : `Rs ${stats.payables.toLocaleString()}`}
-                  </p>
-                </div>
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {language === 'en' ? 'Cash in Hand' : 'کیش ان ہینڈ'}
-                  </p>
-                  <p className="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-white mt-1 tabular-nums">
-                    {hideBalance ? 'Rs ••••' : `Rs ${stats.cashInHand.toLocaleString()}`}
-                  </p>
-                </div>
-                <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {language === 'en' ? 'Net Profit' : 'خالص منافع'}
-                  </p>
-                  <p className="text-lg sm:text-xl font-black font-mono text-[#059669] dark:text-emerald-400 mt-1 tabular-nums">
-                    {hideBalance ? 'Rs ••••' : `Rs ${stats.netProfit.toLocaleString()}`}
-                  </p>
-                </div>
-              </div>
-
-              {/* Visual Charts */}
-              {['Owner', 'Manager'].includes(user.role) && (
-                <DashboardCharts analytics={analytics} lang={language} />
-              )}
-
-              {/* Debt Aging & Collection Summary */}
-              <div id="debt-summary-section">
-                <DebtSummary
-                  customers={customers}
-                  suppliers={suppliers}
-                  transactions={transactions}
-                  lang={language}
-                  getSingleSmsLink={getSingleSmsLink}
-                  getWhatsAppLink={getWhatsAppLink}
-                  onQuickRecordPayment={(customer) => {
-                    if (customer) {
-                      setTxCustId(customer.id);
-                      setTxAmount(String(customer.balance));
-                    }
-                    setTxType('debit');
-                    setTxDesc(language === 'en' ? 'Payment received' : 'ادائیگی وصول');
-                    setActiveModal('transaction');
-                  }}
-                  onNavigateToAccount={(targetTab, accountName) => {
-                    setActiveTab(targetTab);
-                    if (targetTab === 'customers' && accountName) {
-                      const matched = customers.find(
-                        (c) => c.name.toLowerCase() === accountName.toLowerCase()
-                      );
-                      setSelectedCustomerId(matched ? matched.id : null);
-                    }
-                  }}
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {/* 8. SETTINGS TAB */}
+          {/* 7. SETTINGS TAB */}
           {activeTab === 'settings' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -3118,68 +4056,6 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Workspace Preferences */}
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
-                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                  {language === 'en' ? 'Workspace Preferences' : 'ایپ کی ترجیحات'}
-                </h3>
-
-                <div className="divide-y divide-slate-100 dark:divide-zinc-800">
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
-                        {language === 'en' ? 'Interface Language' : 'زبان (Language)'}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400">
-                        {language === 'en'
-                          ? 'Switch between English (LTR) and Urdu (RTL) layout.'
-                          : 'انگریزی اور اردو کے درمیان تبدیل کریں۔'}
-                      </p>
-                    </div>
-                    <LanguageToggle language={language} setLanguage={setLanguage} />
-                  </div>
-
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
-                        {language === 'en' ? 'Color Theme' : 'تھیم (ڈارک / لائٹ موڈ)'}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400">
-                        {language === 'en'
-                          ? 'Choose between light ledger mode and dark executive mode.'
-                          : 'لائٹ یا ڈارک موڈ منتخب کریں۔'}
-                      </p>
-                    </div>
-                    <ThemeToggle />
-                  </div>
-
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-200">
-                        {language === 'en' ? 'Balance Privacy Shield' : 'بیلنس پرائیویسی'}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400">
-                        {language === 'en'
-                          ? 'Mask sensitive rupee amounts on the dashboard when customers are nearby.'
-                          : 'اسکرین پر موجود رقم کو چھپائیں۔'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setHideBalance((prev) => !prev)}
-                      className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${
-                        hideBalance
-                          ? 'bg-emerald-50 border-emerald-200 text-[#064E3B] dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
-                      }`}
-                    >
-                      {hideBalance ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                      <span>{hideBalance ? (language === 'en' ? 'Hidden' : 'پوشیدہ') : (language === 'en' ? 'Visible' : 'ظاہر')}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Data, Backups & Account Session */}
               <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
                 <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
@@ -3194,9 +4070,26 @@ export default function App() {
                       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-extrabold text-slate-700 dark:text-zinc-200 cursor-pointer transition-colors"
                     >
                       <Database className="h-4 w-4 text-[#059669]" />
-                      <span>{t.backups}</span>
+                      <span>
+                        {language === 'en'
+                          ? 'Google Drive & Excel Backups'
+                          : 'گوگل ڈرائیو اور ایکسل بیک اپ'}
+                      </span>
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadLocalExcel('complete')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-extrabold text-slate-700 dark:text-zinc-200 cursor-pointer transition-colors"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-[#059669]" />
+                    <span>
+                      {language === 'en'
+                        ? 'Download Full Backup (.xlsx)'
+                        : 'مکمل ایکسل بیک اپ (.xlsx)'}
+                    </span>
+                  </button>
 
                   <button
                     type="button"
@@ -3291,6 +4184,19 @@ export default function App() {
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-slate-400 font-bold mb-1">
+                  {language === 'en' ? 'Address' : 'پتہ'}
+                </label>
+                <input
+                  type="text"
+                  value={custAddress}
+                  onChange={(e) => setCustAddress(e.target.value)}
+                  placeholder={language === 'en' ? 'Shop / Street / City Address' : 'دکان یا شہر کا پتہ'}
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none font-sans"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-slate-400 font-bold mb-1">
                   {t.initialBalance} ({language === 'en' ? 'Pos if they owe us, Neg if they paid advanced' : 'مثبت اگر ادھار لینا ہے، منفی اگر پیسے پیشگی آئے'})
                 </label>
                 <input
@@ -3372,6 +4278,19 @@ export default function App() {
                   value={suppEmail}
                   onChange={(e) => setSuppEmail(e.target.value)}
                   placeholder={t.email}
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-slate-400 font-bold mb-1">
+                  {language === 'en' ? 'Address' : 'پتہ'}
+                </label>
+                <input
+                  type="text"
+                  value={suppAddress}
+                  onChange={(e) => setSuppAddress(e.target.value)}
+                  placeholder={language === 'en' ? 'Warehouse / Market / City Address' : 'مارکیٹ یا شہر کا پتہ'}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
@@ -4005,190 +4924,53 @@ export default function App() {
 
       {/* BACKUPS & RECOVERY MODAL */}
       {activeModal === 'backups' && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative my-auto"
-          >
-            <button
-              type="button"
-              id="close-backups-modal"
-              onClick={() => setActiveModal(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-start sm:items-center gap-3 border-b border-slate-100 dark:border-zinc-800 pb-4 mb-5 pr-6">
-              <div className="p-2.5 bg-emerald-50 dark:bg-[#D4AF37]/15 rounded-xl text-[#059669] dark:text-[#D4AF37] shrink-0">
-                <Database className="h-6 w-6" />
-              </div>
-              <div className="text-left min-w-0">
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                  {language === 'en' ? 'Backups & Recovery Hub' : 'بیک اپ اور ڈیٹا بحالی مرکز'}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
-                  {language === 'en' 
-                    ? 'Worry-free bookkeeping. The system auto-saves checkpoints on every deletion so you can undo accidental losses anytime!'
-                    : 'پریشانی سے پاک کھاتہ داری۔ ہر حذف شدہ اندراج سے قبل سسٹم خودکار بیک اپ بناتا ہے تاکہ آپ کبھی بھی نقصان سے بچ سکیں!'}
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Export/Import File Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              {/* EXPORT DATA */}
-              <div className="p-4 bg-slate-50/70 dark:bg-zinc-950/40 border border-slate-200/70 dark:border-zinc-800/80 rounded-xl flex flex-col justify-between text-left">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-zinc-200 uppercase tracking-wider mb-1">
-                    {language === 'en' ? 'Export Ledger File' : 'کل کھاتہ ڈاؤن لوڈ کریں'}
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-normal mb-3">
-                    {language === 'en'
-                      ? 'Download your entire business database as a secure JSON backup file on your local storage.'
-                      : 'اپنے پورے کاروبار کا مکمل کھاتہ حاصل کر کے اپنے پاس بطور محفوظ فائل ڈاؤن لوڈ کریں۔'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleManualExport}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-meezan-btn text-white transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-                >
-                  <Download className="h-4 w-4 text-[#D4AF37]" />
-                  <span>{language === 'en' ? 'Download Backup (.json)' : 'بیک اپ فائل ڈاؤن لوڈ کریں'}</span>
-                </button>
-              </div>
-
-              {/* IMPORT DATA */}
-              <div className="p-4 bg-slate-50/70 dark:bg-zinc-950/40 border border-slate-200/70 dark:border-zinc-800/80 rounded-xl flex flex-col justify-between text-left">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-zinc-200 uppercase tracking-wider mb-1">
-                    {language === 'en' ? 'Restore Backup File' : 'بیک اپ فائل اپلوڈ کریں'}
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-normal mb-3">
-                    {language === 'en'
-                      ? 'Upload a previously exported (.json) database backup file to override the current business ledger.'
-                      : 'سابقہ ڈاؤن لوڈ کی گئی بیک اپ فائل اپلوڈ کر کے اپنا محفوظ کھاتہ دوبارہ مکمل بحال کریں۔'}
-                  </p>
-                </div>
-                
-                <label className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 dark:border-zinc-700 hover:border-[#059669] dark:hover:border-[#D4AF37] text-slate-700 dark:text-zinc-300 transition-colors rounded-xl text-xs font-bold shadow-xs cursor-pointer">
-                  <UploadCloud className="h-4 w-4 text-[#059669]" />
-                  <span>{language === 'en' ? 'Upload Backup File' : 'بیک اپ فائل منتخب کریں'}</span>
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleManualImport}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Manual Checkpoint Area */}
-            <div className="p-4 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200/80 dark:border-zinc-800 rounded-xl mb-6 text-left">
-              <h4 className="text-xs font-bold text-[#042F24] dark:text-[#D4AF37] uppercase tracking-wider mb-2">
-                {language === 'en' ? 'Create a Manual Safety Checkpoint' : 'دستی بیک اپ پوائنٹ محفوظ کریں'}
-              </h4>
-              <form onSubmit={handleCreateBackup} className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  required
-                  placeholder={
-                    language === 'en' 
-                      ? 'e.g. Before editing large accounts, Eid Sales, etc.' 
-                      : 'مثال کے طور پر: عید سیل سے پہلے، بڑی ادائیگی سے قبل'
-                  }
-                  value={backupLabel}
-                  onChange={(e) => setBackupLabel(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#059669]"
-                />
-                <button
-                  type="submit"
-                  disabled={isSavingBackup}
-                  className="px-4 py-2.5 bg-meezan-btn text-white rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 text-[#D4AF37] ${isSavingBackup ? 'animate-spin' : ''}`} />
-                  <span>{language === 'en' ? 'Save Checkpoint' : 'سیو بیک اپ'}</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Checkpoints History List */}
-            <div className="space-y-3 text-left">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-zinc-200 flex items-center gap-1.5 uppercase tracking-wider">
-                  <History className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{language === 'en' ? 'Safety Snapshots & Rollbacks' : 'خودکار اور دستی بیک اپ لسٹ'}</span>
-                </h4>
-                <span className="text-[10px] bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 px-2 py-0.5 rounded-full font-mono">
-                  {backups.length} {language === 'en' ? 'Available' : 'موجود'}
-                </span>
-              </div>
-
-              {isLoadingBackups ? (
-                <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
-                  <RefreshCw className="h-6 w-5 animate-spin text-[#059669]" />
-                  <span>{language === 'en' ? 'Querying stored checkpoints...' : 'پوائنٹس لوڈ ہو رہے ہیں...'}</span>
-                </div>
-              ) : backups.length === 0 ? (
-                <div className="py-12 text-center border border-dashed border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-400">
-                  <p>{language === 'en' ? 'No safety backups or snapshots created yet.' : 'کوئی بیک اپ نہیں پایا گیا۔'}</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5 max-h-[35vh] overflow-y-auto pr-1">
-                  {backups.map((bc: any) => {
-                    const isAuto = bc.label.startsWith('Before') || bc.label.includes('Auto-backup');
-                    return (
-                      <div
-                        key={bc.id}
-                        className="p-3 bg-white dark:bg-zinc-900/60 border border-slate-200/70 dark:border-zinc-800 rounded-xl hover:border-slate-300 dark:hover:border-zinc-700 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-2xs"
-                      >
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wide text-center ${
-                              isAuto
-                                ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200/30'
-                                : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/30'
-                            }`}>
-                              {isAuto 
-                                ? (language === 'en' ? 'Auto-Save' : 'خودکار') 
-                                : (language === 'en' ? 'Manual' : 'دستی')}
-                            </span>
-                            <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 break-words">
-                              {bc.label}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 flex-wrap text-[10px] text-slate-400 dark:text-zinc-500 font-mono">
-                            <span>{new Date(bc.timestamp).toLocaleString(language === 'en' ? 'en-US' : 'ur-PK')}</span>
-                            <span>•</span>
-                            <span>
-                              {bc.counts ? (
-                                <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
-                                  {bc.counts.customers} 👥 | {bc.counts.transactions} 💸 | {bc.counts.inventory} 📦
-                                </span>
-                              ) : 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRestoreBackup(bc.id, bc.label)}
-                          className="w-full sm:w-auto px-3.5 py-2 text-[#042F24] dark:text-[#D4AF37] bg-emerald-50 hover:bg-emerald-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap"
-                        >
-                          {language === 'en' ? 'Restore State ↩' : 'بحال کریں'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
+        <GoogleDriveBackupHub
+          language={language}
+          businessName={user.businessName || BRAND.name}
+          userRole={user.role}
+          counts={{
+            customers: customers.length,
+            suppliers: suppliers.length,
+            invoices: invoices.length,
+            inventory: inventory.length,
+            transactions: transactions.length,
+            cashbook: cashbook.length,
+            totalSales: invoices.reduce((sum, inv) => sum + (Number(inv.grandTotal) || 0), 0),
+            totalOutstandingPayments: customers.reduce(
+              (sum, c) => sum + (Number(c.totalBalance) > 0 ? Number(c.totalBalance) : 0),
+              0
+            )
+          }}
+          isDriveConnected={isDriveConnected}
+          driveSyncStatus={driveSyncStatus}
+          driveLastSync={driveLastSync}
+          driveLastModule={driveLastModule}
+          driveError={driveError}
+          autoDriveSync={autoDriveSync}
+          driveFolders={driveFolders}
+          driveModuleFiles={driveModuleFiles}
+          driveHistoryFiles={driveHistoryFiles}
+          onClose={() => setActiveModal(null)}
+          onConnectDrive={handleConnectGoogleDrive}
+          onToggleAutoSync={handleToggleAutoDriveSync}
+          onSyncAllToDrive={handleSyncAllToDrive}
+          onSyncSingleModuleToDrive={handleSyncSingleModuleToDrive}
+          onTriggerDailyBackup={handleTriggerDailyBackup}
+          onTriggerHourlyBackup={handleTriggerHourlyBackup}
+          onRestoreFromDriveFile={handleRestoreFromDriveFile}
+          onDeleteDriveHistoryFile={handleDeleteDriveHistoryFile}
+          onDownloadLocalExcel={handleDownloadLocalExcel}
+          onDownloadLocalJson={handleManualExport}
+          onUploadBackupFile={handleManualImport}
+          backupLabel={backupLabel}
+          setBackupLabel={setBackupLabel}
+          isSavingBackup={isSavingBackup}
+          onCreateLocalCheckpoint={handleCreateBackup}
+          backups={backups}
+          isLoadingBackups={isLoadingBackups}
+          onRestoreLocalCheckpoint={handleRestoreBackup}
+          onDeleteLocalCheckpoint={handleDeleteLocalCheckpoint}
+        />
       )}
 
       {/* CUSTOM CONFIRMATION OVERLAY (Bypass Sandboxed iframe blockages) */}
@@ -4271,9 +5053,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* GLOBAL PERSISTENT FOOTER */}
-      <Footer hasMobileBottomNav={false} />
     </div>
   );
 }

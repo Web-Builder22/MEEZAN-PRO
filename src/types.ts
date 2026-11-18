@@ -18,6 +18,8 @@ export interface Customer {
   name: string;
   phone: string;
   email: string;
+  address?: string;
+  createdAt?: string;
   balance: number; // Positive means customer owes us (Receivable), negative means we owe customer (Payable)
   updatedAt: string;
   businessId: string;
@@ -31,6 +33,8 @@ export interface Supplier {
   name: string;
   phone: string;
   email: string;
+  address?: string;
+  createdAt?: string;
   balance: number; // Positive means we owe supplier (Payable), negative means supplier owes us
   updatedAt: string;
   businessId: string;

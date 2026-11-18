@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Square, Play, Pause, Trash2, Volume2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Mic, Square, Play, Pause, Trash2, Volume2, AlertCircle, X, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Language } from '../translations';
 
@@ -296,9 +296,20 @@ interface VoiceDescriptionFieldProps {
   placeholder?: string;
 }
 
+interface MicErrorState {
+  title: string;
+  message: string;
+  settingsHint?: string;
+}
+
 /**
  * Description field for the 'Add Transaction' modal that records the user's raw voice audio
  * (without converting voice to text) and saves the voice recording directly as the transaction description.
+ *
+ * IMPORTANT PERMISSION GUARANTEE:
+ * - Never requests or queries microphone access on mount, login, or navigation.
+ * - Microphone permission is checked and requested strictly inside `handleMicButtonClick`
+ *   when the user explicitly clicks the microphone button.
  */
 export default function VoiceDescriptionField({
   value,
@@ -309,53 +320,144 @@ export default function VoiceDescriptionField({
 }: VoiceDescriptionFieldProps) {
   const { textNote, audioDataUrl, durationLabel } = parseVoiceDescription(value);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [micError, setMicError] = useState<MicErrorState | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const elapsedRef = useRef<number>(0);
+  const isCancelledRef = useRef<boolean>(false);
   const latestTextNoteRef = useRef<string>(textNote);
 
   useEffect(() => {
     latestTextNoteRef.current = textNote;
   }, [textNote]);
 
-  const cleanupRecordingResources = () => {
-    if (timerRef.current) {
+  /**
+   * Stops the active timer and immediately stops & releases all microphone MediaStreamTracks.
+   */
+  const releaseMicrophoneTracks = useCallback(() => {
+    if (timerRef.current !== null) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.enabled = false;
+          track.stop();
+        } catch {
+          // Ignore track stop errors if already ended
+        }
+      });
       streamRef.current = null;
     }
-  };
-
-  useEffect(() => {
-    return () => {
-      cleanupRecordingResources();
-    };
   }, []);
 
-  const startVoiceRecording = async () => {
-    setErrorMsg('');
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setErrorMsg(
-        language === 'en'
-          ? 'Audio recording is not supported in this browser.'
-          : 'اس براؤزر میں آواز ریکارڈنگ کی سہولت موجود نہیں۔'
-      );
+  // Ensure tracks are released if the modal closes or component unmounts mid-recording
+  useEffect(() => {
+    return () => {
+      isCancelledRef.current = true;
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // Ignore
+        }
+      }
+      mediaRecorderRef.current = null;
+      releaseMicrophoneTracks();
+    };
+  }, [releaseMicrophoneTracks]);
+
+  /**
+   * Triggered ONLY when the user explicitly clicks the microphone / record button.
+   * 1. Checks if the browser supports MediaDevices API.
+   * 2. Checks if microphone permission is already granted or denied via Permissions API.
+   * 3. Requests microphone access via `navigator.mediaDevices.getUserMedia({ audio: true })`.
+   * 4. Starts recording only after permission is granted.
+   */
+  const handleMicButtonClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Guard against programmatic or non-user-initiated triggers
+    if (e.nativeEvent && e.nativeEvent.isTrusted === false) {
       return;
     }
 
+    if (isRecording || isRequestingPermission) {
+      return;
+    }
+
+    setMicError(null);
+
+    // 1. Check browser support for MediaDevices API and MediaRecorder
+    if (
+      typeof window === 'undefined' ||
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function' ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      setMicError({
+        title:
+          language === 'en'
+            ? 'Voice Recording Not Supported'
+            : 'آواز ریکارڈنگ کی سہولت موجود نہیں',
+        message:
+          language === 'en'
+            ? 'Your current browser does not support microphone audio recording. Please use a modern browser such as Chrome, Edge, or Safari over a secure (HTTPS) connection.'
+            : 'آپ کا موجودہ براؤزر مائیکروفون ریکارڈنگ کو سپورٹ نہیں کرتا۔ براہ کرم کروم، ایج یا سفاری استعمال کریں۔'
+      });
+      return;
+    }
+
+    setIsRequestingPermission(true);
+
     try {
+      // 2. Check existing microphone permission status if Permissions API is available
+      if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+        try {
+          const permissionStatus = await navigator.permissions.query({
+            name: 'microphone' as PermissionName
+          });
+
+          if (permissionStatus.state === 'denied') {
+            setIsRequestingPermission(false);
+            setMicError({
+              title:
+                language === 'en'
+                  ? 'Microphone Access is Blocked'
+                  : 'مائیکروفون کی اجازت بلاک ہے',
+              message:
+                language === 'en'
+                  ? 'Meezan Flow needs microphone access to record your voice note, but permission is currently blocked.'
+                  : 'آواز کا نوٹ ریکارڈ کرنے کے لیے مائیکروفون کی اجازت درکار ہے جو اس وقت بلاک ہے۔',
+              settingsHint:
+                language === 'en'
+                  ? 'How to enable: Click the lock or site-settings icon in your browser address bar, set "Microphone" to "Allow", and click Record Voice Description again.'
+                  : 'اجازت دینے کا طریقہ: براؤزر کے ایڈریس بار میں لاک (Lock) آئیکن پر کلک کریں، مائیکروفون کو "Allow" کریں اور دوبارہ بٹن دبائیں۔'
+            });
+            return;
+          }
+        } catch {
+          // Some browsers do not support 'microphone' in navigator.permissions.query;
+          // fall through to navigator.mediaDevices.getUserMedia({ audio: true })
+        }
+      }
+
+      // 3. Request microphone stream (prompts user if state is 'prompt', or resolves immediately if 'granted')
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // 4. Start recording only after permission is granted and stream is active
       streamRef.current = stream;
       chunksRef.current = [];
       elapsedRef.current = 0;
+      isCancelledRef.current = false;
       setElapsedSeconds(0);
 
       // Choose a compact supported audio MIME type
@@ -366,7 +468,7 @@ export default function VoiceDescriptionField({
         'audio/ogg;codecs=opus'
       ];
       let selectedMimeType = '';
-      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+      if (typeof MediaRecorder.isTypeSupported === 'function') {
         for (const t of preferredTypes) {
           if (MediaRecorder.isTypeSupported(t)) {
             selectedMimeType = t;
@@ -385,17 +487,30 @@ export default function VoiceDescriptionField({
       const recorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data && e.data.size > 0) {
-          chunksRef.current.push(e.data);
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          chunksRef.current.push(event.data);
         }
       };
 
       recorder.onstop = () => {
+        const wasCancelled = isCancelledRef.current;
+        const recordedChunks = [...chunksRef.current];
         const finalDurationLabel = formatSeconds(Math.max(1, elapsedRef.current));
         const mimeType = recorder.mimeType || selectedMimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type: mimeType });
 
+        // Always release microphone tracks immediately when recording stops or is cancelled
+        chunksRef.current = [];
+        mediaRecorderRef.current = null;
+        releaseMicrophoneTracks();
+        setIsRecording(false);
+        setElapsedSeconds(0);
+
+        if (wasCancelled || recordedChunks.length === 0) {
+          return;
+        }
+
+        const blob = new Blob(recordedChunks, { type: mimeType });
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = typeof reader.result === 'string' ? reader.result : null;
@@ -409,21 +524,23 @@ export default function VoiceDescriptionField({
           }
         };
         reader.readAsDataURL(blob);
-        cleanupRecordingResources();
-        setIsRecording(false);
       };
 
       recorder.onerror = () => {
-        setErrorMsg(
-          language === 'en'
-            ? 'Recording failed. Please try again.'
-            : 'ریکارڈنگ میں خرابی آئی۔ دوبارہ کوشش کریں۔'
-        );
-        cleanupRecordingResources();
+        releaseMicrophoneTracks();
+        mediaRecorderRef.current = null;
         setIsRecording(false);
+        setMicError({
+          title: language === 'en' ? 'Recording Interrupted' : 'ریکارڈنگ میں خرابی',
+          message:
+            language === 'en'
+              ? 'An unexpected error occurred while recording audio. Please try again.'
+              : 'آواز ریکارڈ کرتے وقت خرابی پیش آئی۔ براہ کرم دوبارہ کوشش کریں۔'
+        });
       };
 
       recorder.start(250);
+      setIsRequestingPermission(false);
       setIsRecording(true);
 
       timerRef.current = window.setInterval(() => {
@@ -431,27 +548,104 @@ export default function VoiceDescriptionField({
         setElapsedSeconds(elapsedRef.current);
       }, 1000);
     } catch (err: any) {
-      cleanupRecordingResources();
+      releaseMicrophoneTracks();
+      mediaRecorderRef.current = null;
+      setIsRequestingPermission(false);
       setIsRecording(false);
-      setErrorMsg(
-        language === 'en'
-          ? 'Microphone permission denied. Please allow microphone access to record voice description.'
-          : 'مائیکروفون کی اجازت نہیں ملی۔ آواز ریکارڈ کرنے کے لیے مائیک کی اجازت دیں۔'
-      );
+
+      const errorName = err?.name || '';
+      if (
+        errorName === 'NotAllowedError' ||
+        errorName === 'PermissionDeniedError' ||
+        errorName === 'SecurityError'
+      ) {
+        setMicError({
+          title:
+            language === 'en'
+              ? 'Microphone Permission Denied'
+              : 'مائیکروفون کی اجازت نہیں ملی',
+          message:
+            language === 'en'
+              ? 'You declined microphone access, so voice recording could not start. You can still type your transaction description below.'
+              : 'مائیکروفون کی اجازت نہ ملنے کی وجہ سے آواز ریکارڈ نہیں ہو سکی۔ آپ نیچے تحریری تفصیل لکھ سکتے ہیں۔',
+          settingsHint:
+            language === 'en'
+              ? 'To enable microphone access: Click the lock / tune icon next to the URL in your browser address bar, change "Microphone" permission to "Allow", and then click the microphone button again.'
+              : 'مائیکروفون آن کرنے کے لیے: اپنے براؤزر کے ایڈریس بار میں لاک آئیکن پر کلک کریں، "Microphone" کو "Allow" کریں، اور دوبارہ مائیک بٹن دبائیں۔'
+        });
+      } else if (errorName === 'NotFoundError' || errorName === 'DevicesNotFoundError') {
+        setMicError({
+          title:
+            language === 'en' ? 'No Microphone Detected' : 'کوئی مائیکروفون نہیں ملا',
+          message:
+            language === 'en'
+              ? 'No microphone device was found on your system. Please connect a microphone or headset and try again.'
+              : 'آپ کے آلے کے ساتھ کوئی مائیکروفون منسلک نہیں ملا۔ براہ کرم مائیک چیک کریں اور دوبارہ کوشش کریں۔'
+        });
+      } else if (errorName === 'NotReadableError' || errorName === 'TrackStartError') {
+        setMicError({
+          title:
+            language === 'en' ? 'Microphone is Busy' : 'مائیکروفون مصروف ہے',
+          message:
+            language === 'en'
+              ? 'Your microphone is currently being used by another application or browser tab. Please close other apps using the mic and try again.'
+              : 'آپ کا مائیکروفون کسی دوسری ایپ میں استعمال ہو رہا ہے۔ براہ کرم اسے بند کر کے دوبارہ کوشش کریں۔'
+        });
+      } else {
+        setMicError({
+          title:
+            language === 'en'
+              ? 'Could Not Access Microphone'
+              : 'مائیکروفون تک رسائی ممکن نہیں ہوئی',
+          message:
+            language === 'en'
+              ? 'Unable to start microphone recording. Please check your browser microphone settings and try again.'
+              : 'مائیکروفون شروع نہیں ہو سکا۔ براہ کرم اپنے براؤزر کی مائیک سیٹنگز چیک کریں۔'
+        });
+      }
     }
   };
 
+  /**
+   * Stops recording, saves the voice note, and releases all microphone tracks.
+   */
   const stopVoiceRecording = () => {
+    isCancelledRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
         mediaRecorderRef.current.stop();
       } catch {
-        cleanupRecordingResources();
+        releaseMicrophoneTracks();
+        mediaRecorderRef.current = null;
         setIsRecording(false);
       }
     } else {
-      cleanupRecordingResources();
+      releaseMicrophoneTracks();
+      mediaRecorderRef.current = null;
       setIsRecording(false);
+    }
+  };
+
+  /**
+   * Cancels recording without overwriting existing data and immediately releases microphone tracks.
+   */
+  const cancelVoiceRecording = () => {
+    isCancelledRef.current = true;
+    chunksRef.current = [];
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        releaseMicrophoneTracks();
+        mediaRecorderRef.current = null;
+        setIsRecording(false);
+        setElapsedSeconds(0);
+      }
+    } else {
+      releaseMicrophoneTracks();
+      mediaRecorderRef.current = null;
+      setIsRecording(false);
+      setElapsedSeconds(0);
     }
   };
 
@@ -465,24 +659,29 @@ export default function VoiceDescriptionField({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <label className="block text-xs font-extrabold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
           {label}
         </label>
 
-        {/* Record / Stop Voice Button */}
+        {/* Record / Stop / Cancel Voice Controls */}
         {!isRecording ? (
           <motion.button
             type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={startVoiceRecording}
+            whileHover={{ scale: isRequestingPermission ? 1 : 1.02 }}
+            whileTap={{ scale: isRequestingPermission ? 1 : 0.97 }}
+            onClick={handleMicButtonClick}
+            disabled={isRequestingPermission}
             id="record-voice-desc-btn"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-meezan-btn text-white text-xs font-extrabold shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-meezan-btn text-white text-xs font-extrabold shadow-2xs cursor-pointer disabled:opacity-60"
           >
-            <Mic className="h-3.5 w-3.5 text-[#D4AF37]" />
+            <Mic className={`h-3.5 w-3.5 text-[#D4AF37] ${isRequestingPermission ? 'animate-pulse' : ''}`} />
             <span>
-              {audioDataUrl
+              {isRequestingPermission
+                ? language === 'en'
+                  ? 'Checking Mic Permission...'
+                  : 'مائیک کی اجازت چیک ہو رہی ہے...'
+                : audioDataUrl
                 ? language === 'en'
                   ? 'Re-record Voice'
                   : 'دوبارہ آواز ریکارڈ کریں'
@@ -492,20 +691,33 @@ export default function VoiceDescriptionField({
             </span>
           </motion.button>
         ) : (
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.96 }}
-            onClick={stopVoiceRecording}
-            id="stop-voice-desc-btn"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-extrabold shadow-sm ring-4 ring-red-500/20 cursor-pointer"
-          >
-            <Square className="h-3 w-3 fill-current" />
-            <span>
-              {language === 'en'
-                ? `Stop & Save (${formatSeconds(elapsedSeconds)})`
-                : `محفوظ کریں (${formatSeconds(elapsedSeconds)})`}
-            </span>
-          </motion.button>
+          <div className="flex items-center gap-1.5">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={cancelVoiceRecording}
+              id="cancel-voice-desc-btn"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-extrabold cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span>{language === 'en' ? 'Cancel' : 'منسوخ'}</span>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={stopVoiceRecording}
+              id="stop-voice-desc-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-extrabold shadow-sm ring-4 ring-red-500/20 cursor-pointer"
+            >
+              <Square className="h-3 w-3 fill-current" />
+              <span>
+                {language === 'en'
+                  ? `Stop & Save (${formatSeconds(elapsedSeconds)})`
+                  : `محفوظ کریں (${formatSeconds(elapsedSeconds)})`}
+              </span>
+            </motion.button>
+          </div>
         )}
       </div>
 
@@ -583,12 +795,42 @@ export default function VoiceDescriptionField({
         className="w-full px-3.5 py-2.5 min-h-[44px] text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#059669]"
       />
 
-      {errorMsg && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
+      {/* Friendly Microphone Permission / Hardware Error Banner */}
+      <AnimatePresence>
+        {micError && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 text-xs space-y-1.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-extrabold text-amber-900 dark:text-amber-300">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>{micError.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMicError(null)}
+                className="text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 p-0.5 rounded cursor-pointer"
+                title={language === 'en' ? 'Dismiss' : 'بند کریں'}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-amber-800 dark:text-amber-200/90 font-medium leading-relaxed">
+              {micError.message}
+            </p>
+            {micError.settingsHint && (
+              <div className="flex items-start gap-1.5 pt-1 text-[11px] font-bold text-slate-700 dark:text-zinc-300 bg-white/80 dark:bg-zinc-900/70 p-2 rounded-lg border border-amber-200/60 dark:border-amber-900/50">
+                <Settings className="h-3.5 w-3.5 text-[#059669] shrink-0 mt-0.5" />
+                <span>{micError.settingsHint}</span>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+

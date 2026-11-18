@@ -28,7 +28,8 @@ import {
   Database,
   LogOut,
   UserPlus,
-  Receipt
+  Receipt,
+  Briefcase
 } from 'lucide-react';
 import {
   User,
@@ -48,12 +49,12 @@ import { TransactionDescriptionView } from './VoiceTransactionInput';
 
 export type AppTab =
   | 'dashboard'
+  | 'business-operations'
   | 'invoices'
   | 'inventory'
   | 'customers'
   | 'suppliers'
   | 'cashbook'
-  | 'reports'
   | 'settings';
 
 interface BusinessDashboardProps {
@@ -858,10 +859,7 @@ export default function BusinessDashboard({
         </div>
 
         {user.role !== 'Employee' ? (
-          <div
-            onClick={() => onNavigateTab('reports')}
-            className="bg-emerald-50/60 dark:bg-emerald-950/25 rounded-xl px-4 py-3 border border-emerald-200/80 dark:border-emerald-900/60 flex items-center justify-between gap-3 cursor-pointer hover:border-emerald-600/40 transition-colors"
-          >
+          <div className="bg-emerald-50/60 dark:bg-emerald-950/25 rounded-xl px-4 py-3 border border-emerald-200/80 dark:border-emerald-900/60 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 truncate">{t.profit}</p>
               <p className="text-sm sm:text-base font-black text-payable-green dark:text-emerald-400 font-mono tabular-nums mt-0.5">
@@ -878,17 +876,17 @@ export default function BusinessDashboard({
         )}
       </div>
 
-      {/* ==================== 3. QUICK ACTIONS ==================== */}
+      {/* ==================== 3. BUSINESS OPERATIONS MAIN CARD ==================== */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-slate-200/90 dark:border-zinc-800 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-              {language === 'en' ? 'Quick Actions' : 'فوری کاروباری اقدامات'}
+              {language === 'en' ? 'Business Operations & Actions' : 'کاروباری آپریشنز اور فوری اقدامات'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-zinc-400">
               {language === 'en'
-                ? 'Launch frequent store operations, billing, and customer ledger tasks in one click.'
-                : 'فوری بلنگ، نئی مصنوعات، گاہک کھاتہ اور رپورٹس تک براہ راست رسائی۔'}
+                ? 'Access Customers, Suppliers, Invoices, and Inventory from one unified workspace.'
+                : 'گاہک کھاتہ، سپلائرز، انوائسز اور اسٹاک تک ایک ہی جگہ سے رسائی حاصل کریں۔'}
             </p>
           </div>
 
@@ -923,93 +921,62 @@ export default function BusinessDashboard({
           </div>
         </div>
 
-        {/* 4 Primary Action Cards required by prompt: Add New Sale, Add Product, Manage Customers, View Reports */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* 1. Add New Sale */}
-          <button
-            type="button"
-            onClick={() => onOpenModal('invoice')}
-            className="flex items-center gap-3.5 p-4 rounded-xl bg-meezan-btn text-white text-left shadow-xs hover:opacity-95 transition-all cursor-pointer group"
-          >
-            <div className="h-10 w-10 rounded-xl bg-white/15 border border-[#D4AF37]/40 flex items-center justify-center shrink-0">
-              <Receipt className="h-5 w-5 text-[#D4AF37]" />
+        {/* Single Clickable Main Dashboard Box: Business Operations */}
+        <motion.button
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.99 }}
+          type="button"
+          id="business-operations-card"
+          onClick={() => {
+            onSelectCustomer(null);
+            onNavigateTab('business-operations');
+          }}
+          className="w-full text-left rounded-2xl bg-gradient-to-r from-[#042F24] via-[#064E3B] to-[#047857] text-white p-5 sm:p-6 border border-emerald-700/60 shadow-md hover:shadow-lg transition-all cursor-pointer group"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-4 min-w-0">
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-white/15 border border-[#D4AF37]/40 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <Briefcase className="h-6 w-6 sm:h-7 sm:w-7 text-[#D4AF37]" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h4 className="text-base sm:text-xl font-black text-white tracking-tight">
+                    {language === 'en' ? 'Business Operations' : 'کاروباری آپریشنز (Business Operations)'}
+                  </h4>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#D4AF37] text-[#042F24]">
+                    {language === 'en' ? '4 Core Modules' : '4 اہم شعبے'}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-emerald-100/90 font-medium">
+                  {language === 'en'
+                    ? 'Click to open Customers, Suppliers, Invoices, and Inventory management.'
+                    : 'گاہک کھاتے، سپلائرز، انوائسز اور اسٹاک مینجمنٹ کھولنے کے لیے کلک کریں۔'}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-extrabold text-white truncate">
-                {language === 'en' ? 'Add New Sale' : 'نئی فروخت / بل بنائیں'}
-              </p>
-              <p className="text-[11px] text-emerald-100/80 truncate mt-0.5">
-                {language === 'en' ? 'Create invoice & receipt' : 'بل اور رسید تیار کریں'}
-              </p>
-            </div>
-            <Plus className="h-4 w-4 text-[#D4AF37] shrink-0 group-hover:scale-110 transition-transform" />
-          </button>
 
-          {/* 2. Add Product */}
-          <button
-            type="button"
-            onClick={() => onOpenModal('inventory')}
-            className="flex items-center gap-3.5 p-4 rounded-xl bg-slate-50 hover:bg-emerald-50/50 dark:bg-zinc-950 dark:hover:bg-zinc-800/70 border border-slate-200/90 dark:border-zinc-800 text-left transition-all cursor-pointer group"
-          >
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/60 flex items-center justify-center shrink-0">
-              <Package className="h-5 w-5 text-[#059669] dark:text-emerald-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                {language === 'en' ? 'Add Product' : 'نیا سامان شامل کریں'}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">
-                {language === 'en' ? 'Register stock & SKU price' : 'اسٹاک اور قیمت درج کریں'}
-              </p>
-            </div>
-            <Plus className="h-4 w-4 text-[#059669] shrink-0 group-hover:scale-110 transition-transform" />
-          </button>
+            <div className="flex items-center justify-between md:justify-end gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-white/10 shrink-0">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-100/90">
+                <span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
+                  {customers.length} {language === 'en' ? 'Customers' : 'گاہک'}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
+                  {suppliers.length} {language === 'en' ? 'Suppliers' : 'سپلائرز'}
+                </span>
+                <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
+                  {invoices.length} {language === 'en' ? 'Invoices' : 'بلز'}
+                </span>
+                <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
+                  {inventory.length} {language === 'en' ? 'Products' : 'مصنوعات'}
+                </span>
+              </div>
 
-          {/* 3. Manage Customers */}
-          <button
-            type="button"
-            onClick={() => {
-              onSelectCustomer(null);
-              onNavigateTab('customers');
-            }}
-            className="flex items-center gap-3.5 p-4 rounded-xl bg-slate-50 hover:bg-emerald-50/50 dark:bg-zinc-950 dark:hover:bg-zinc-800/70 border border-slate-200/90 dark:border-zinc-800 text-left transition-all cursor-pointer group"
-          >
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/60 flex items-center justify-center shrink-0">
-              <Users className="h-5 w-5 text-[#059669] dark:text-emerald-400" />
+              <div className="h-9 w-9 rounded-xl bg-white/15 group-hover:bg-[#D4AF37] text-white group-hover:text-[#042F24] flex items-center justify-center transition-colors shrink-0">
+                <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                {language === 'en' ? 'Manage Customers' : 'گاہک کھاتے سنبھالیں'}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">
-                {language === 'en'
-                  ? `${customers.length} active customer accounts`
-                  : `${customers.length} فعال گاہک کھاتے`}
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-
-          {/* 4. View Reports */}
-          <button
-            type="button"
-            onClick={() => onNavigateTab('reports')}
-            className="flex items-center gap-3.5 p-4 rounded-xl bg-slate-50 hover:bg-emerald-50/50 dark:bg-zinc-950 dark:hover:bg-zinc-800/70 border border-slate-200/90 dark:border-zinc-800 text-left transition-all cursor-pointer group"
-          >
-            <div className="h-10 w-10 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 flex items-center justify-center shrink-0">
-              <BarChart3 className="h-5 w-5 text-[#042F24] dark:text-[#D4AF37]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                {language === 'en' ? 'View Reports' : 'رپورٹس اور تجزیات'}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">
-                {language === 'en' ? 'Analytics & PDF statements' : 'منافع اور پی ڈی ایف اسٹیٹمنٹ'}
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        </div>
+          </div>
+        </motion.button>
 
         {/* Optional Statement Customer Picker Drawer */}
         <AnimatePresence>

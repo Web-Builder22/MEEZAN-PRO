@@ -1,5 +1,4 @@
 import { Language } from '../translations';
-import { Globe } from 'lucide-react';
 
 interface LanguageToggleProps {
   language: Language;
@@ -7,22 +6,44 @@ interface LanguageToggleProps {
 }
 
 export default function LanguageToggle({ language, setLanguage }: LanguageToggleProps) {
-  const toggleLanguage = () => {
-    const nextLang: Language = language === 'en' ? 'ur' : 'en';
+  const selectLanguage = (nextLang: Language) => {
     setLanguage(nextLang);
-    // Dynamically adjust HTML text direction
     document.documentElement.dir = nextLang === 'ur' ? 'rtl' : 'ltr';
     localStorage.setItem('lang', nextLang);
+  };
+
+  const toggleLanguage = () => {
+    selectLanguage(language === 'en' ? 'ur' : 'en');
   };
 
   return (
     <button
       id="language-btn"
+      type="button"
+      dir="ltr"
       onClick={toggleLanguage}
-      className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors shadow-sm text-sm font-medium focus:outline-none"
+      aria-label="Toggle language between English and Urdu"
+      className="inline-flex items-center p-1 rounded-full bg-slate-100/95 dark:bg-zinc-800/95 border border-slate-200/80 dark:border-zinc-700/80 shadow-inner select-none cursor-pointer transition-all focus:outline-none"
     >
-      <Globe className="h-[18px] w-[18px] text-[#0B192C] dark:text-[#D4AF37]" />
-      <span>{language === 'en' ? 'اردو (Urdu)' : 'English'}</span>
+      <span
+        className={`px-3 py-1 rounded-full text-xs font-black tracking-wide transition-all duration-200 ${
+          language === 'en'
+            ? 'bg-gradient-to-r from-[#064E3B] to-[#059669] text-white shadow-[0_2px_8px_rgba(5,150,105,0.4)]'
+            : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+        }`}
+      >
+        EN
+      </span>
+      <span
+        className={`px-3 py-1 rounded-full text-xs font-black leading-none transition-all duration-200 ${
+          language === 'ur'
+            ? 'bg-gradient-to-r from-[#064E3B] to-[#059669] text-white shadow-[0_2px_8px_rgba(5,150,105,0.4)]'
+            : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+        }`}
+      >
+        اردو
+      </span>
     </button>
   );
 }
+

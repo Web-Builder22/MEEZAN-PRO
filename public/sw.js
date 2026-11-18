@@ -1,8 +1,5 @@
-
-const CACHE_NAME = 'meezanflow-v1';
+const CACHE_NAME = 'meezanflow-v3';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
   '/favicon.svg',
   '/manifest.json',
   '/icon-192.png',
@@ -12,11 +9,11 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching static baseline assets...');
       return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -26,7 +23,6 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[SW] Obliterating stale service worker cache:', key);
             return caches.delete(key);
           }
         })
@@ -39,17 +35,25 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
 
-  // Do not intercept non-GET requests, web sockets, or browser extensions
-  if (req.method !== 'GET' || !url.protocol.startsWith('http')) {
+  // Do not intercept non-GET requests, cross-origin requests (Firebase/Google APIs), or browser extensions
+  if (req.method !== 'GET' || !url.protocol.startsWith('http') || url.origin !== self.location.origin) {
     return;
   }
 
-  // Bypass Vite internal modules, HMR, and development assets
-  if (url.pathname.startsWith('/@') || url.pathname.includes('vite') || url.pathname.includes('node_modules')) {
+  // Always bypass cache for Vite internal modules, source files (/src/*), TypeScript/JS modules, and configs
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.includes('vite') ||
+    url.pathname.includes('node_modules') ||
+    url.pathname.endsWith('.ts') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.json')
+  ) {
     return;
   }
 
-  // Bypass cache completely for API requests, providing an organic offline JSON response wrapper on failure
+  // Bypass cache completely for API requests, providing an offline JSON response wrapper on failure
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(req).catch(() => {
@@ -66,20 +70,19 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Stale-While-Revalidate caching strategy for standard static resources
+  // Network-First strategy for HTML & static assets with offline cache fallback
   e.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(req).then((cachedResponse) => {
-        const fetchPromise = fetch(req).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            cache.put(req, networkResponse.clone());
-          }
-          return networkResponse;
-        }).catch(() => {
-          // Graceful fetch suppression
-        });
-        return cachedResponse || fetchPromise;
-      });
-    })
+    fetch(req)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const cloned = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, cloned));
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(req);
+      })
   );
 });
+

@@ -9,7 +9,7 @@ import {
   User,
   UserRole
 } from './types';
-import { auth, db as firestoreDb, doc, getDoc, setDoc } from './firebase';
+import { auth, db as firestoreDb, isFirestoreConfigured, doc, getDoc, setDoc } from './firebase';
 
 // Simple API helper that handles Authorization header
 const getHeaders = () => {
@@ -194,8 +194,12 @@ function getCurrentUserRole(): UserRole {
   return 'Owner';
 }
 
-function createLocalBackupSnapshot(db: LocalDatabase, label: string) {
-  const id = 'bk_' + Date.now();
+function createLocalBackupSnapshot(
+  db: LocalDatabase,
+  label: string,
+  backupType: 'manual' | 'daily' | 'hourly' | 'emergency' = 'manual'
+) {
+  const id = 'bk_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
   const timestamp = new Date().toISOString();
   const counts = {
     customers: db.customers.length,
@@ -205,21 +209,21 @@ function createLocalBackupSnapshot(db: LocalDatabase, label: string) {
     inventory: db.inventory.length,
     invoices: db.invoices.length
   };
-  const snapshot = {
-    metadata: { id, timestamp, label, counts },
-    db: {
-      customers: JSON.parse(JSON.stringify(db.customers)),
-      suppliers: JSON.parse(JSON.stringify(db.suppliers)),
-      transactions: JSON.parse(JSON.stringify(db.transactions)),
-      cashbook: JSON.parse(JSON.stringify(db.cashbook)),
-      inventory: JSON.parse(JSON.stringify(db.inventory)),
-      invoices: JSON.parse(JSON.stringify(db.invoices))
-    }
+  const dbCopy = {
+    customers: JSON.parse(JSON.stringify(db.customers)),
+    suppliers: JSON.parse(JSON.stringify(db.suppliers)),
+    transactions: JSON.parse(JSON.stringify(db.transactions)),
+    cashbook: JSON.parse(JSON.stringify(db.cashbook)),
+    inventory: JSON.parse(JSON.stringify(db.inventory)),
+    invoices: JSON.parse(JSON.stringify(db.invoices))
   };
+  const byteSize = new Blob([JSON.stringify(dbCopy)]).size;
+  const snapshot = {
+    metadata: { id, timestamp, label, counts, backupType, size: byteSize },
+    db: dbCopy
+  };
+  // Retention Policy: Never automatically delete historical backups
   db.backups.unshift(snapshot);
-  if (db.backups.length > 20) {
-    db.backups = db.backups.slice(0, 20);
-  }
   return snapshot.metadata;
 }
 
@@ -234,6 +238,7 @@ async function syncUserWithFirestore(payload: {
   role?: string;
   businessName?: string;
 }): Promise<Partial<User> | null> {
+  if (!isFirestoreConfigured) return null;
   const currentFbUser = auth.currentUser;
   const uid = payload.uid || currentFbUser?.uid;
   if (!uid || !currentFbUser || currentFbUser.uid !== uid) {
@@ -702,7 +707,7 @@ export const api = {
       },
       'Failed to add customer',
       () => {
-        const { name, phone, email, initialBalance, promisedPaymentDate, promisedPaymentNote } = payload || {};
+        const { name, phone, email, address, initialBalance, promisedPaymentDate, promisedPaymentNote } = payload || {};
         if (!name || !phone) {
           throw new Error('Customer Name and Phone number are required');
         }
@@ -713,6 +718,8 @@ export const api = {
           name: String(name).trim(),
           phone: String(phone).trim(),
           email: email ? String(email).trim() : '',
+          address: address ? String(address).trim() : '',
+          createdAt: nowIso,
           balance: Number(initialBalance) || 0,
           updatedAt: nowIso,
           businessId: 'b1',
@@ -758,13 +765,14 @@ export const api = {
         if (index === -1) {
           throw new Error('Customer not found');
         }
-        const { name, phone, email, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = payload || {};
+        const { name, phone, email, address, balance, promisedPaymentDate, promisedPaymentNote, lastReminderOpenedAt } = payload || {};
         const updatedName = name ? String(name).trim() : db.customers[index].name;
         db.customers[index] = {
           ...db.customers[index],
           name: updatedName,
           phone: phone ? String(phone).trim() : db.customers[index].phone,
           email: email !== undefined ? String(email).trim() : db.customers[index].email,
+          address: address !== undefined ? String(address).trim() : db.customers[index].address,
           balance: balance !== undefined ? Number(balance) : db.customers[index].balance,
           promisedPaymentDate:
             promisedPaymentDate !== undefined
@@ -841,23 +849,57 @@ export const api = {
       },
       'Failed to add supplier',
       () => {
-        const { name, phone, email, initialBalance } = payload || {};
+        const { name, phone, email, address, initialBalance } = payload || {};
         if (!name || !phone) {
           throw new Error('Supplier Name and Phone are required');
         }
         const db = loadLocalDb();
+        const nowIso = new Date().toISOString();
         const newSupplier: Supplier = {
           id: 's_' + Math.random().toString(36).substring(2, 9),
           name: String(name).trim(),
           phone: String(phone).trim(),
           email: email ? String(email).trim() : '',
+          address: address ? String(address).trim() : '',
+          createdAt: nowIso,
           balance: Number(initialBalance) || 0,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowIso,
           businessId: 'b1'
         };
         db.suppliers.push(newSupplier);
         saveLocalDb(db);
         return newSupplier;
+      }
+    );
+  },
+
+  async updateSupplier(id: string, payload: any): Promise<Supplier> {
+    return requestWithFallback(
+      `/api/suppliers/${id}`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      },
+      'Failed to update supplier',
+      () => {
+        const db = loadLocalDb();
+        const index = db.suppliers.findIndex((s) => s.id === id);
+        if (index === -1) {
+          throw new Error('Supplier not found');
+        }
+        const { name, phone, email, address, balance } = payload || {};
+        db.suppliers[index] = {
+          ...db.suppliers[index],
+          name: name ? String(name).trim() : db.suppliers[index].name,
+          phone: phone ? String(phone).trim() : db.suppliers[index].phone,
+          email: email !== undefined ? String(email).trim() : db.suppliers[index].email,
+          address: address !== undefined ? String(address).trim() : db.suppliers[index].address,
+          balance: balance !== undefined ? Number(balance) : db.suppliers[index].balance,
+          updatedAt: new Date().toISOString()
+        };
+        saveLocalDb(db);
+        return db.suppliers[index];
       }
     );
   },
@@ -1325,40 +1367,73 @@ export const api = {
     );
   },
 
-  async createBackup(label: string): Promise<any> {
+  async createBackup(
+    label: string,
+    backupType: 'manual' | 'daily' | 'hourly' | 'emergency' = 'manual'
+  ): Promise<any> {
     return requestWithFallback(
       '/api/backups/create',
       {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ label })
+        body: JSON.stringify({ label, backupType })
       },
       'Failed to create backup snapshot',
       () => {
+        if (getCurrentUserRole() !== 'Owner') {
+          throw new Error('Only authorized Administrators (Owner) can create backups');
+        }
         const db = loadLocalDb();
-        const labelSanitized = (label || 'Manual User Checkpoint').slice(0, 100);
-        const snapshot = createLocalBackupSnapshot(db, labelSanitized);
+        const labelSanitized = (label || 'Manual User Checkpoint').slice(0, 120);
+        const snapshot = createLocalBackupSnapshot(db, labelSanitized, backupType);
         saveLocalDb(db);
         return { message: 'Database backup checkpoint created successfully', snapshot };
       }
     );
   },
 
+  async deleteBackup(id: string): Promise<any> {
+    return requestWithFallback(
+      `/api/backups/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        headers: getHeaders()
+      },
+      'Failed to delete backup snapshot',
+      () => {
+        if (getCurrentUserRole() !== 'Owner') {
+          throw new Error('Only authorized Administrators (Owner) can delete historical backups');
+        }
+        const db = loadLocalDb();
+        db.backups = db.backups.filter((b) => b.metadata.id !== id);
+        saveLocalDb(db);
+        return { message: 'Historical backup checkpoint deleted permanently.', id };
+      }
+    );
+  },
+
   async restoreBackup(id: string): Promise<any> {
     return requestWithFallback(
-      `/api/backups/restore/${id}`,
+      `/api/backups/restore/${encodeURIComponent(id)}`,
       {
         method: 'POST',
         headers: getHeaders()
       },
       'Failed to restore backup snapshot',
       () => {
+        if (getCurrentUserRole() !== 'Owner') {
+          throw new Error('Only authorized Administrators (Owner) can restore backups');
+        }
         const db = loadLocalDb();
         const found = db.backups.find((b) => b.metadata.id === id);
         if (!found) {
           throw new Error('Backup checkpoint file not found');
         }
-        createLocalBackupSnapshot(db, `Auto-backup before restoring Checkpoint ID: ${id}`);
+        const emergencySnapshot = createLocalBackupSnapshot(
+          db,
+          `Emergency Pre-Restore Snapshot (before restoring ${found.metadata.label || id})`,
+          'emergency'
+        );
         db.customers = JSON.parse(JSON.stringify(found.db.customers || []));
         db.suppliers = JSON.parse(JSON.stringify(found.db.suppliers || []));
         db.transactions = JSON.parse(JSON.stringify(found.db.transactions || []));
@@ -1366,34 +1441,80 @@ export const api = {
         db.inventory = JSON.parse(JSON.stringify(found.db.inventory || []));
         db.invoices = JSON.parse(JSON.stringify(found.db.invoices || []));
         saveLocalDb(db);
-        return { message: 'Success! Ledger database rolled back to: ' + found.metadata.label };
+        const verifiedCounts = {
+          customers: db.customers.length,
+          suppliers: db.suppliers.length,
+          invoices: db.invoices.length,
+          inventory: db.inventory.length,
+          transactions: db.transactions.length,
+          cashbook: db.cashbook.length
+        };
+        return {
+          message: `Success! Ledger database restored to "${found.metadata.label}". Verified ${verifiedCounts.customers} Customers, ${verifiedCounts.suppliers} Suppliers, ${verifiedCounts.invoices} Invoices, and ${verifiedCounts.inventory} Inventory products.`,
+          verifiedCounts,
+          emergencySnapshot
+        };
       }
     );
   },
 
-  async uploadBackup(backupData: any): Promise<any> {
+  async uploadBackup(backupData: any, sourceLabel?: string): Promise<any> {
     return requestWithFallback(
       '/api/backups/upload',
       {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ backupData })
+        body: JSON.stringify({ backupData, sourceLabel })
       },
       'Failed to import backup file',
       () => {
-        if (!backupData || !backupData.customers) {
-          throw new Error('Invalid backup structure. Must contain standard ledger records.');
+        if (getCurrentUserRole() !== 'Owner') {
+          throw new Error('Only authorized Administrators (Owner) can restore backup files');
         }
+        if (
+          !backupData ||
+          (!Array.isArray(backupData.customers) &&
+            !Array.isArray(backupData.suppliers) &&
+            !Array.isArray(backupData.invoices) &&
+            !Array.isArray(backupData.inventory))
+        ) {
+          throw new Error('Backup integrity check failed: Must contain valid ledger records.');
+        }
+        const dedupeById = <T extends { id: string }>(arr: T[]): T[] => {
+          const seen = new Map<string, T>();
+          for (const item of arr) {
+            if (item && item.id) {
+              seen.set(String(item.id), item);
+            }
+          }
+          return Array.from(seen.values());
+        };
         const db = loadLocalDb();
-        createLocalBackupSnapshot(db, 'Auto-backup before importing custom json file');
-        db.customers = backupData.customers || [];
-        db.suppliers = backupData.suppliers || [];
-        db.transactions = backupData.transactions || [];
-        db.cashbook = backupData.cashbook || [];
-        db.inventory = backupData.inventory || [];
-        db.invoices = backupData.invoices || [];
+        const emergencySnapshot = createLocalBackupSnapshot(
+          db,
+          `Emergency Pre-Restore Snapshot (before restoring ${sourceLabel || 'Excel Backup'})`,
+          'emergency'
+        );
+        if (Array.isArray(backupData.customers)) db.customers = dedupeById(backupData.customers);
+        if (Array.isArray(backupData.suppliers)) db.suppliers = dedupeById(backupData.suppliers);
+        if (Array.isArray(backupData.transactions)) db.transactions = dedupeById(backupData.transactions);
+        if (Array.isArray(backupData.cashbook)) db.cashbook = dedupeById(backupData.cashbook);
+        if (Array.isArray(backupData.inventory)) db.inventory = dedupeById(backupData.inventory);
+        if (Array.isArray(backupData.invoices)) db.invoices = dedupeById(backupData.invoices);
         saveLocalDb(db);
-        return { message: 'Success! Custom backup JSON file imported successfully.' };
+        const verifiedCounts = {
+          customers: db.customers.length,
+          suppliers: db.suppliers.length,
+          invoices: db.invoices.length,
+          inventory: db.inventory.length,
+          transactions: db.transactions.length,
+          cashbook: db.cashbook.length
+        };
+        return {
+          message: `Success! Backup data restored and verified (${verifiedCounts.customers} Customers, ${verifiedCounts.suppliers} Suppliers, ${verifiedCounts.invoices} Invoices, ${verifiedCounts.inventory} Inventory items). Emergency snapshot saved.`,
+          verifiedCounts,
+          emergencySnapshot
+        };
       }
     );
   }
